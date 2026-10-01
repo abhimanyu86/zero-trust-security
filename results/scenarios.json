@@ -1,0 +1,217 @@
+[
+  {
+    "id": "S1",
+    "name": "Rogue / cloned device",
+    "ps13": "Device identity, mTLS",
+    "observed": {
+      "cloned_identity_cert": {
+        "effect": "deny",
+        "reasons": [
+          "device identity rejected: certificate not issued by plant CA"
+        ]
+      },
+      "no_certificate": {
+        "effect": "deny",
+        "reasons": [
+          "device identity rejected: no client certificate"
+        ]
+      }
+    },
+    "passed": true
+  },
+  {
+    "id": "S2",
+    "name": "Stolen key + false data injection",
+    "ps13": "Anomaly detection, M2M trust, revocation",
+    "observed": {
+      "baseline": {
+        "overflow_seconds": 110,
+        "max_true_level_m": 3.2
+      },
+      "zero_trust": {
+        "overflow_seconds": 0,
+        "max_true_level_m": 2.016,
+        "attack_detected_after_s": 2,
+        "diagnosis": {
+          "t": 122,
+          "sensor": "LT-101",
+          "verdict": "attack",
+          "kind": "false_data_injection_step",
+          "detected_by": "residual",
+          "evidence": {
+            "residual_score": 23.91,
+            "signal_std_sigma": 105.15,
+            "diff_std_sigma": 1.59,
+            "max_step_sigma": 241.9
+          }
+        },
+        "LT101_revoked": true,
+        "LT101_next_message": {
+          "effect": "deny",
+          "reasons": [
+            "device identity rejected: certificate revoked (attack_detected: false_data_injection_step)"
+          ]
+        },
+        "control_source_at_end": "gateway-consensus"
+      }
+    },
+    "passed": true
+  },
+  {
+    "id": "S3",
+    "name": "Fingerprint photo replay on critical command",
+    "ps13": "Authentication (biometric + liveness)",
+    "observed": {
+      "screen_replay_login": {
+        "ok": false,
+        "reasons": [
+          "presentation attack: screen/print recapture detected"
+        ],
+        "score": 1.0,
+        "live": false
+      },
+      "impostor_finger_login": {
+        "ok": false,
+        "reasons": [
+          "fingerprint does not match (score 0.08 < 0.30)"
+        ],
+        "score": 0.075,
+        "live": true
+      },
+      "genuine_live_login": {
+        "ok": true,
+        "score": 0.65
+      },
+      "critical_command_after_login": {
+        "effect": "allow",
+        "reasons": [
+          "pump.force_on by asha"
+        ]
+      }
+    },
+    "passed": true
+  },
+  {
+    "id": "S4",
+    "name": "API request replay",
+    "ps13": "Secure APIs",
+    "observed": {
+      "command_first": {
+        "effect": "allow",
+        "reasons": [
+          "valve.set by ravi"
+        ]
+      },
+      "command_replayed": {
+        "effect": "deny",
+        "reasons": [
+          "anti-replay: replay"
+        ]
+      },
+      "telemetry_first": {
+        "effect": "allow",
+        "reasons": [
+          "trust 1.00"
+        ]
+      },
+      "telemetry_replayed": {
+        "effect": "deny",
+        "reasons": [
+          "anti-replay: replay"
+        ]
+      },
+      "telemetry_stale": {
+        "effect": "deny",
+        "reasons": [
+          "anti-replay: stale_timestamp"
+        ]
+      }
+    },
+    "passed": true
+  },
+  {
+    "id": "S5",
+    "name": "Genuine sensor fault",
+    "ps13": "Fault vs attack separation",
+    "observed": {
+      "first_diagnosis": {
+        "ts": 1760000106.0,
+        "kind": "fault_detected",
+        "severity": "info",
+        "subject": "LT-101",
+        "detail": "stuck_value \u2014 maintenance ticket raised, identity untouched",
+        "diagnosis": {
+          "t": 106,
+          "sensor": "LT-101",
+          "verdict": "fault",
+          "kind": "stuck_value",
+          "detected_by": "residual",
+          "evidence": {
+            "residual_score": 1.84,
+            "signal_std_sigma": 1.43,
+            "diff_std_sigma": 0.0
+          }
+        }
+      },
+      "detected_after_s": 6,
+      "LT101_revoked": false,
+      "LT101_trust": 1.0,
+      "control_source_at_end": "gateway-consensus",
+      "overflow_seconds": 0,
+      "tickets": [
+        {
+          "sensor": "LT-101",
+          "type": "maintenance",
+          "kind": "stuck_value"
+        }
+      ]
+    },
+    "passed": true
+  },
+  {
+    "id": "S6",
+    "name": "Stolen session token",
+    "ps13": "Secure access (sender-constrained tokens, least privilege)",
+    "observed": {
+      "token_from_other_console": {
+        "effect": "deny",
+        "reasons": [
+          "token is bound to a different console (stolen token?)"
+        ]
+      },
+      "privilege_escalation": {
+        "effect": "deny",
+        "reasons": [
+          "operator ravi lacks scope 'override'"
+        ]
+      }
+    },
+    "passed": true
+  },
+  {
+    "id": "S7",
+    "name": "Forged M2M interlock",
+    "ps13": "Machine-to-machine trust",
+    "observed": {
+      "forged_signature": {
+        "effect": "deny",
+        "reasons": [
+          "peer message signature invalid"
+        ]
+      },
+      "actuator_posing_as_sensor": {
+        "effect": "deny",
+        "reasons": [
+          "only sensors may publish process values"
+        ]
+      },
+      "genuine_peer": {
+        "effect": "allow",
+        "reasons": [
+          "peer trust 1.00"
+        ]
+      }
+    },
+    "passed": true
+  }
+]

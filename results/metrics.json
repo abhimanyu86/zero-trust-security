@@ -1,0 +1,371 @@
+{
+  "generated": "2026-09-30 12:14",
+  "quick": false,
+  "calibration": {
+    "normal_episodes": 40,
+    "samples": 35600,
+    "thresholds_sigma": {
+      "LT-101": 6.0,
+      "PT-101": 6.0,
+      "FT-101": 6.0
+    }
+  },
+  "detector": {
+    "normal": {
+      "episodes": 60,
+      "hours": 15.0,
+      "episodes_with_false_alarm": 0,
+      "false_alarms": 0,
+      "false_alarms_per_hour": 0.0
+    },
+    "cells": [
+      {
+        "kind": "stuck",
+        "truth": "fault",
+        "sensor": "LT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_fault": 12,
+        "median_time_to_detect_s": 12.5
+      },
+      {
+        "kind": "stuck",
+        "truth": "fault",
+        "sensor": "PT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_fault": 12,
+        "median_time_to_detect_s": 12.0
+      },
+      {
+        "kind": "stuck",
+        "truth": "fault",
+        "sensor": "FT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_fault": 12,
+        "median_time_to_detect_s": 91.0
+      },
+      {
+        "kind": "dropout",
+        "truth": "fault",
+        "sensor": "LT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_fault": 12,
+        "median_time_to_detect_s": 2.0
+      },
+      {
+        "kind": "dropout",
+        "truth": "fault",
+        "sensor": "PT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_fault": 12,
+        "median_time_to_detect_s": 2.0
+      },
+      {
+        "kind": "dropout",
+        "truth": "fault",
+        "sensor": "FT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_fault": 12,
+        "median_time_to_detect_s": 2.0
+      },
+      {
+        "kind": "noise_burst",
+        "truth": "fault",
+        "sensor": "LT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_fault": 10,
+        "verdict_attack": 2,
+        "median_time_to_detect_s": 78.0
+      },
+      {
+        "kind": "noise_burst",
+        "truth": "fault",
+        "sensor": "PT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_fault": 12,
+        "median_time_to_detect_s": 52.5
+      },
+      {
+        "kind": "noise_burst",
+        "truth": "fault",
+        "sensor": "FT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_fault": 12,
+        "median_time_to_detect_s": 55.5
+      },
+      {
+        "kind": "out_of_range",
+        "truth": "fault",
+        "sensor": "LT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_fault": 12,
+        "median_time_to_detect_s": 1.0
+      },
+      {
+        "kind": "out_of_range",
+        "truth": "fault",
+        "sensor": "PT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_fault": 12,
+        "median_time_to_detect_s": 1.0
+      },
+      {
+        "kind": "out_of_range",
+        "truth": "fault",
+        "sensor": "FT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_fault": 12,
+        "median_time_to_detect_s": 1.0
+      },
+      {
+        "kind": "drift",
+        "truth": "fault",
+        "sensor": "LT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_ambiguous": 12,
+        "median_time_to_detect_s": 69.0
+      },
+      {
+        "kind": "drift",
+        "truth": "fault",
+        "sensor": "PT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_ambiguous": 12,
+        "median_time_to_detect_s": 68.0
+      },
+      {
+        "kind": "drift",
+        "truth": "fault",
+        "sensor": "FT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_ambiguous": 12,
+        "median_time_to_detect_s": 63.5
+      },
+      {
+        "kind": "fdi_offset",
+        "truth": "attack",
+        "sensor": "LT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_attack": 12,
+        "median_time_to_detect_s": 2.0
+      },
+      {
+        "kind": "fdi_offset",
+        "truth": "attack",
+        "sensor": "PT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_attack": 12,
+        "median_time_to_detect_s": 2.0
+      },
+      {
+        "kind": "fdi_offset",
+        "truth": "attack",
+        "sensor": "FT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_attack": 7,
+        "verdict_ambiguous": 4,
+        "verdict_fault": 1,
+        "median_time_to_detect_s": 4.0
+      },
+      {
+        "kind": "fdi_replay",
+        "truth": "attack",
+        "sensor": "LT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_attack": 12,
+        "median_time_to_detect_s": 2.0
+      },
+      {
+        "kind": "fdi_replay",
+        "truth": "attack",
+        "sensor": "PT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_attack": 12,
+        "median_time_to_detect_s": 2.0
+      },
+      {
+        "kind": "fdi_replay",
+        "truth": "attack",
+        "sensor": "FT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_ambiguous": 10,
+        "verdict_attack": 2,
+        "median_time_to_detect_s": 57.5
+      },
+      {
+        "kind": "fdi_freeze",
+        "truth": "attack",
+        "sensor": "LT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_attack": 5,
+        "verdict_ambiguous": 7,
+        "median_time_to_detect_s": 12.5
+      },
+      {
+        "kind": "fdi_freeze",
+        "truth": "attack",
+        "sensor": "PT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_attack": 7,
+        "verdict_ambiguous": 5,
+        "median_time_to_detect_s": 13.0
+      },
+      {
+        "kind": "fdi_freeze",
+        "truth": "attack",
+        "sensor": "FT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_ambiguous": 11,
+        "verdict_attack": 1,
+        "median_time_to_detect_s": 87.0
+      },
+      {
+        "kind": "stealth_ramp",
+        "truth": "attack",
+        "sensor": "LT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_ambiguous": 12,
+        "median_time_to_detect_s": 70.5
+      },
+      {
+        "kind": "stealth_ramp",
+        "truth": "attack",
+        "sensor": "PT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_ambiguous": 12,
+        "median_time_to_detect_s": 63.5
+      },
+      {
+        "kind": "stealth_ramp",
+        "truth": "attack",
+        "sensor": "FT-101",
+        "n": 12,
+        "detected": 12,
+        "isolated_correctly": 12,
+        "verdict_ambiguous": 12,
+        "median_time_to_detect_s": 70.0
+      }
+    ],
+    "summary": {
+      "fault": {
+        "episodes": 180,
+        "detection_rate": 1.0,
+        "isolation_accuracy": 1.0,
+        "verdict_fault": 142,
+        "verdict_attack": 2,
+        "verdict_ambiguous": 36,
+        "missed": 0,
+        "median_time_to_detect_s": 13.0
+      },
+      "attack": {
+        "episodes": 144,
+        "detection_rate": 1.0,
+        "isolation_accuracy": 1.0,
+        "verdict_fault": 1,
+        "verdict_attack": 70,
+        "verdict_ambiguous": 73,
+        "missed": 0,
+        "median_time_to_detect_s": 10.5
+      },
+      "fault_wrongly_called_attack_rate": 0.011,
+      "attack_wrongly_called_fault_rate": 0.007,
+      "fault_correct_verdict_excl_drift": 0.986,
+      "attack_correct_verdict_excl_stealth_ramp": 0.648
+    }
+  },
+  "biometric": {
+    "algorithm": "ransac_alignment",
+    "identities": 30,
+    "genuine_pairs": 90,
+    "impostor_pairs": 90,
+    "threshold": 0.3,
+    "FAR_at_threshold": 0.0,
+    "FRR_at_threshold": 0.0,
+    "EER": 0.0,
+    "genuine_score_min_median": [
+      0.525,
+      0.7
+    ],
+    "impostor_score_median_max": [
+      0.087,
+      0.125
+    ],
+    "spoof_detection_rate": 1.0,
+    "live_false_reject_rate": 0.1,
+    "live_false_reject_by_noise": {
+      "0": 0.0,
+      "6": 0.0,
+      "15": 0.3
+    },
+    "caveat": "Synthetic minutiae and synthetic images. Real contactless captures in the UIDAI PoC measured EER ~43% on a 31-identity gallery with the production matcher; real-capture accuracy is the open item this funding addresses."
+  },
+  "latency": {
+    "telemetry_and_m2m_request": {
+      "median_ms": 0.449,
+      "p99_ms": 0.984,
+      "n": 1200
+    },
+    "operator_login_biometric": {
+      "median_ms": 22.531,
+      "p99_ms": 37.772,
+      "n": 20
+    },
+    "operator_command": {
+      "median_ms": 0.878,
+      "p99_ms": 1.058,
+      "n": 200
+    },
+    "physics_check_per_second_ms": 0.124
+  }
+}
