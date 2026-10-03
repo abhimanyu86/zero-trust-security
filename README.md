@@ -29,7 +29,7 @@ is the only thing left that can catch the lie.
 | Attacks wrongly treated as faults | **0.7%** |
 | Median time to detect: attacks / faults | **10.5 s / 13 s** |
 | Stolen-key false-data attack (scenario S2) | tank overflow **110 s → 0 s**, detected in **2 s**, certificate auto-revoked |
-| Gateway decision latency, median | telemetry **0.45 ms**, command **0.9 ms**, biometric login **23 ms** |
+| Gateway decision latency, median (laptop CPU; varies by machine) | telemetry and commands **under 1 ms**, biometric login **under 25 ms** |
 
 Full tables are in [`results/EVALUATION.md`](results/EVALUATION.md). **Read the caveats there.**
 Slow drift and a patient "stealth ramp" attack can't be told apart from process data alone, so

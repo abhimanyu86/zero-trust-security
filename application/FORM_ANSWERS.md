@@ -98,7 +98,7 @@ identifies which sensor disagrees, and then reads that sensor's own signal:
 - Median time to detect an attack: 10.5 s.
 - In a stolen-key false-data attack, a conventional setup overflowed the tank for 110 s.
   SenseTrust detected the attack in 2 s, revoked the device and prevented the overflow.
-- Gateway decision time: under 1 ms per request; biometric login 23 ms.
+- Gateway decision time: under 1 ms per request; biometric login under 25 ms.
 
 **Tech stack:** Python, `cryptography`, scikit-learn, Streamlit dashboard, Docker, 36 automated
 tests. Designed to work with 5G networks: device identities can be anchored to SIM/eSIM, and
