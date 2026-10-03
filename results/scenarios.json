@@ -164,11 +164,6 @@
           "sensor": "LT-101",
           "type": "maintenance",
           "kind": "stuck_value"
-        },
-        {
-          "sensor": "PT-101",
-          "type": "inspect",
-          "kind": "slow_drift_or_stealth_ramp"
         }
       ]
     },

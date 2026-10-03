@@ -144,8 +144,11 @@ class Gateway:
     def process_tick(self, pump, valve):
         """Run the physics check over this second's accepted telemetry."""
         with self._lock:
-            readings = {s: (None if self.trust.is_quarantined(s) else self._frame.get(s))
-                        for s in SENSORS}
+            # Quarantined and degraded sensors are out of the physics check as well as the
+            # control loop: their values are already known to be wrong, and feeding them in
+            # would make the honest instruments disagree with them and look faulty.
+            readings = {s: (None if self.trust.is_quarantined(s) or s in self.degraded
+                            else self._frame.get(s)) for s in SENSORS}
             self._frame = {}
             diagnoses = self.detector.update(readings, pump, valve)
             for d in diagnoses:

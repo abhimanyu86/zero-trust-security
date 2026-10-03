@@ -49,6 +49,17 @@ engine is an open work item (see below).
 | S6 | Operator token stolen and used from another console; privilege escalation | Secure access | denied: token bound to console certificate, scope check |
 | S7 | Forged "tank low" message to the pump controller | M2M trust | denied |
 
+## Live demo on your machine
+
+**Windows:** double-click `run_demo.bat`. **macOS/Linux:** `./run_demo.sh`.
+The first run installs the dependencies into `venv` and takes a few minutes. The launcher starts the
+mutual-TLS gateway on https://127.0.0.1:8443 and opens the dashboard at **http://localhost:8501**.
+
+The **Live plant** page runs the gateway and the plant in real time. Use the buttons on the left
+to launch a stolen-key false-data attack, a rogue device, a finger photo held up to the camera, or
+a genuine hardware fault, and watch the gateway respond. **Scripted scenarios** runs the seven
+end-to-end scenarios below.
+
 ## Quickstart
 
 ```bash
