@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-30 12:14",
+  "generated": "2026-10-03 05:27",
   "quick": false,
   "calibration": {
     "normal_episodes": 40,
@@ -352,20 +352,20 @@
   },
   "latency": {
     "telemetry_and_m2m_request": {
-      "median_ms": 0.449,
-      "p99_ms": 0.984,
+      "median_ms": 0.218,
+      "p99_ms": 0.451,
       "n": 1200
     },
     "operator_login_biometric": {
-      "median_ms": 22.531,
-      "p99_ms": 37.772,
+      "median_ms": 13.974,
+      "p99_ms": 15.681,
       "n": 20
     },
     "operator_command": {
-      "median_ms": 0.878,
-      "p99_ms": 1.058,
+      "median_ms": 0.334,
+      "p99_ms": 0.468,
       "n": 200
     },
-    "physics_check_per_second_ms": 0.124
+    "physics_check_per_second_ms": 0.022
   }
 }

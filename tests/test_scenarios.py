@@ -20,6 +20,7 @@ def test_s2_quantifies_physical_impact(results):
     assert obs["baseline"]["overflow_seconds"] > 0
     assert obs["zero_trust"]["overflow_seconds"] == 0
     assert obs["zero_trust"]["attack_detected_after_s"] <= 10
+    assert obs["zero_trust"]["honest_sensors_revoked"] == []     # only the liar is cut off
 
 
 def test_biometric_templates_are_encrypted_and_iso_fir_roundtrips(tmp_path):

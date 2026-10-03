@@ -165,7 +165,8 @@ class FaultAttackDetector:
                 self.smooth[s].append(dev[s])
             sm = float(np.mean(self.smooth[s])) if self.smooth[s] else 0.0
             score[s] = abs(sm) / self.thr[s]
-            self.over[s] = self.over[s] + 1 if score[s] > 1.0 else 0
+            # No residual this second (an input is missing or excluded): no new evidence.
+            self.over[s] = 0 if dev[s] is None else (self.over[s] + 1 if score[s] > 1.0 else 0)
 
         self.history.append({"t": self.t, "L1": L1, "L2": L2, "L3": self.L3,
                              **{"z_" + s: dev[s] for s in SENSORS},
@@ -199,6 +200,14 @@ class FaultAttackDetector:
     def _raise(self, sensor, verdict, kind, detected_by, evidence):
         d = Diagnosis(self.t, sensor, verdict, kind, detected_by, evidence)
         self.alarmed[sensor] = d
+        # Every other sensor's residual was computed against this one's readings, so its
+        # recent history is contaminated by the same error. Start those windows afresh;
+        # otherwise an honest neighbour is convicted on the culprit's evidence.
+        for other in SENSORS:
+            if other != sensor:
+                self.smooth[other].clear()
+                self.dev[other].clear()
+                self.over[other] = 0
         return d
 
     def _classify(self, s, detected_by, score):

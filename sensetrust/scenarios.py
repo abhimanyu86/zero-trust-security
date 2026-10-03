@@ -58,6 +58,8 @@ def s2_stolen_key_false_data(base, calibration=None):
                 "attack_detected_after_s": None if attack is None else int(attack["ts"] - site.t0) - 120,
                 "diagnosis": None if attack is None else attack["diagnosis"],
                 "LT101_revoked": site.gw.ca.is_revoked(site.dev["LT-101"].cert),
+                "honest_sensors_revoked": [s for s in ("PT-101", "FT-101")
+                                           if site.gw.ca.is_revoked(site.dev[s].cert)],
                 "LT101_next_message": post,
                 "control_source_at_end": site.log[-1]["control_source"]})
         out["zero_trust" if zt else "baseline"] = r
@@ -67,6 +69,7 @@ def s2_stolen_key_false_data(base, calibration=None):
     zt, base_ = out["zero_trust"], out["baseline"]
     ok = (base_["overflow_seconds"] > 0 and zt["overflow_seconds"] == 0
           and zt["LT101_revoked"] and zt["LT101_next_message"]["effect"] == "deny"
+          and zt["honest_sensors_revoked"] == []
           and zt["diagnosis"] is not None and zt["diagnosis"]["verdict"] == "attack")
     return {"observed": {k: v for k, v in out.items() if k not in ("log", "events")},
             "passed": ok, "_log": out.get("log"), "_events": out.get("events")}

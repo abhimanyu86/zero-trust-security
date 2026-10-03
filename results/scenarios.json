@@ -46,6 +46,7 @@
           }
         },
         "LT101_revoked": true,
+        "honest_sensors_revoked": [],
         "LT101_next_message": {
           "effect": "deny",
           "reasons": [
@@ -163,6 +164,11 @@
           "sensor": "LT-101",
           "type": "maintenance",
           "kind": "stuck_value"
+        },
+        {
+          "sensor": "PT-101",
+          "type": "inspect",
+          "kind": "slow_drift_or_stealth_ramp"
         }
       ]
     },
