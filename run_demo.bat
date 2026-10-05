@@ -11,6 +11,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo Using:
+%PY% --version
+
 if not exist venv\Scripts\python.exe (
   echo Creating virtual environment...
   %PY% -m venv venv || (pause & exit /b 1)
@@ -26,5 +29,9 @@ echo Starting the mutual-TLS gateway on https://127.0.0.1:8443 in a second windo
 start "SenseTrust gateway" venv\Scripts\python -m sensetrust.server --data data
 
 echo Starting the dashboard on http://localhost:8501 ...
-venv\Scripts\python -m streamlit run dashboard\app.py --server.port 8501 --browser.gatherUsageStats false --client.toolbarMode minimal
+echo Your browser opens in a few seconds. Keep this window open while you use the demo.
+start "" cmd /c "timeout /t 8 /nobreak >nul & start http://localhost:8501"
+venv\Scripts\python -m streamlit run dashboard\app.py --server.headless true --server.port 8501 --browser.gatherUsageStats false --client.toolbarMode minimal
+echo.
+echo The dashboard stopped. If you saw an error above, copy it and send it over.
 pause

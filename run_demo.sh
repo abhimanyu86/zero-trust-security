@@ -17,4 +17,5 @@ venv/bin/python -m sensetrust.server --data data &
 GW=$!
 trap 'kill $GW 2>/dev/null' EXIT
 echo "Starting the dashboard on http://localhost:8501 ..."
-venv/bin/python -m streamlit run dashboard/app.py --server.port 8501 --browser.gatherUsageStats false --client.toolbarMode minimal
+( sleep 6; { command -v xdg-open && xdg-open http://localhost:8501; } || { command -v open && open http://localhost:8501; } ) >/dev/null 2>&1 &
+venv/bin/python -m streamlit run dashboard/app.py --server.headless true --server.port 8501 --browser.gatherUsageStats false --client.toolbarMode minimal
