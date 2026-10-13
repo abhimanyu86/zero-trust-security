@@ -214,5 +214,140 @@
       }
     },
     "passed": true
+  },
+  {
+    "id": "S8",
+    "name": "Device enrolment and renewal abuse",
+    "ps13": "Device identity lifecycle",
+    "observed": {
+      "enrolled": {
+        "certificate_days": 30,
+        "ca_holds_device_key": false,
+        "first_reading": {
+          "effect": "allow",
+          "reasons": [
+            "trust 1.00"
+          ]
+        }
+      },
+      "token_reused_by_attacker": {
+        "ok": false,
+        "reason": "enrolment token already used"
+      },
+      "csr_asks_for_console_role": {
+        "issued_role": "sensor"
+      },
+      "expired_token": {
+        "ok": false,
+        "reason": "enrolment token expired"
+      },
+      "after_renewal": {
+        "old_certificate": {
+          "effect": "deny",
+          "reasons": [
+            "device identity rejected: certificate revoked (superseded)"
+          ]
+        },
+        "new_certificate": {
+          "effect": "allow",
+          "reasons": [
+            "trust 1.00"
+          ]
+        }
+      },
+      "quarantined_device_renews": {
+        "ok": false,
+        "reason": "renewal refused: certificate revoked (attack_detected)"
+      }
+    },
+    "passed": true
+  },
+  {
+    "id": "S9",
+    "name": "MQTT: stolen key posts as another sensor",
+    "ps13": "Secure APIs over MQTT, encryption",
+    "observed": {
+      "own_topic": {
+        "broker_reason_code": 0,
+        "gateway": {
+          "effect": "allow",
+          "reasons": [
+            "trust 1.00"
+          ]
+        }
+      },
+      "posting_as_PT-101": {
+        "broker_reason_code": 135,
+        "meaning": "135 = not authorised",
+        "reached_gateway": false
+      },
+      "attacker_ca_connect": "broker closed the connection (certificate rejected or revoked)",
+      "no_certificate_connect": "broker closed the connection (certificate rejected or revoked)",
+      "message_on_open_connection_after_revocation": {
+        "effect": "deny",
+        "reasons": [
+          "device identity rejected: certificate revoked (attack_detected)"
+        ]
+      },
+      "reconnect_after_revocation": "broker closed the connection (certificate rejected or revoked)"
+    },
+    "passed": true
+  },
+  {
+    "id": "S10",
+    "name": "5G: key and SIM must belong together",
+    "ps13": "Device identity on private 5G, slices",
+    "observed": {
+      "genuine_LT101_on_its_SIM": {
+        "effect": "allow",
+        "reasons": [
+          "trust 1.00"
+        ]
+      },
+      "stolen_SIM_without_the_device_key": {
+        "effect": "deny",
+        "reasons": [
+          "device identity rejected: certificate not issued by plant CA"
+        ]
+      },
+      "LT101_key_on_PT101_SIM": {
+        "effect": "deny",
+        "reasons": [
+          "5G binding: certificate is LT-101 but 10.46.0.12 is the SIM address of PT-101"
+        ]
+      },
+      "LT101_key_on_unknown_SIM": {
+        "effect": "deny",
+        "reasons": [
+          "5G binding: 10.46.0.99 on the telemetry slice belongs to no enrolled SIM"
+        ]
+      },
+      "LT101_revoked_as_stolen_key": true,
+      "command_from_tablet_on_control_slice": {
+        "effect": "allow",
+        "reasons": [
+          "pump.force_on by asha"
+        ]
+      },
+      "command_from_sensor_on_telemetry_slice": {
+        "effect": "deny",
+        "reasons": [
+          "5G binding: command traffic is not allowed on the telemetry slice"
+        ]
+      },
+      "vendor_on_closed_maintenance_slice": {
+        "effect": "deny",
+        "reasons": [
+          "5G binding: maintenance slice is closed"
+        ]
+      },
+      "wired_console_unaffected": {
+        "effect": "allow",
+        "reasons": [
+          "valve.set by ravi"
+        ]
+      }
+    },
+    "passed": true
   }
 ]

@@ -100,9 +100,11 @@ identifies which sensor disagrees, and then reads that sensor's own signal:
   SenseTrust detected the attack in 2 s, revoked the device and prevented the overflow.
 - Gateway decision time: under 1 ms per request; biometric login under 25 ms.
 
-**Tech stack:** Python, `cryptography`, scikit-learn, Streamlit dashboard, Docker, 36 automated
-tests. Designed to work with 5G networks: device identities can be anchored to SIM/eSIM, and
-access policy can take the network slice into account.
+**Tech stack:** Python, `cryptography`, scikit-learn, Eclipse Mosquitto (MQTT over mutual TLS),
+Streamlit dashboard, Docker, 67 automated tests. Devices generate their own keys and enrol with
+one-time tokens (the CA holds no device keys). For private 5G, the gateway checks that a
+device's certificate, its SIM's address and its network slice all match; this is tested
+against sample 5G core data, with end-to-end testing planned on the COMET testbed.
 
 ## Current Technology Readiness Level (TRL)
 
@@ -122,8 +124,9 @@ SITAA PoC, with an Android app and cloud backends.*
   of about 43%, and UIDAI's acceptance target is above 85% accuracy. **[Add any commercial or
   engagement terms you're able to disclose.]**
 - **SenseTrust PoC.** It is validated in a physics-based simulation of a water-treatment plant:
-  324 injected fault/attack episodes, 15 hours of normal operation, and 7 end-to-end attack
-  scenarios. All of it is reproducible from our repository.
+  324 injected fault/attack episodes, 15 hours of normal operation, and 10 end-to-end attack
+  scenarios, including industrial MQTT through a real broker. All of it is reproducible from
+  our repository.
 - **Not yet field-tested on a live plant.** A pilot site is the main thing we are asking COMET
   to help with.
 

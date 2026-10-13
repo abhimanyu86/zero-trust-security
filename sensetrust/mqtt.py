@@ -35,8 +35,19 @@ BRIDGE_ID = "gateway-mqtt"
 MQTT_NOT_AUTHORIZED = 135
 
 
+WINDOWS_MOSQUITTO = [r"C:\Program Files\mosquitto\mosquitto.exe",
+                     r"C:\Program Files (x86)\mosquitto\mosquitto.exe"]
+
+
+def mosquitto_path():
+    found = shutil.which("mosquitto")
+    if found:
+        return found
+    return next((p for p in WINDOWS_MOSQUITTO if os.path.exists(p)), None)
+
+
 def broker_available():
-    return shutil.which("mosquitto") is not None
+    return mosquitto_path() is not None
 
 
 class MosquittoBroker:
@@ -73,14 +84,14 @@ class MosquittoBroker:
             "crlfile %s" % ca.crl_path,
             "acl_file %s" % self.acl_path,
         ]
-        if os.geteuid() == 0:
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
             # Mosquitto drops root to the 'mosquitto' user, which cannot read 0600 keys.
             lines.insert(0, "user %s" % getpass.getuser())
         with open(self.conf_path, "w") as f:
             f.write("\n".join(lines) + "\n")
 
     def start(self, timeout=10):
-        self.proc = subprocess.Popen(["mosquitto", "-c", self.conf_path],
+        self.proc = subprocess.Popen([mosquitto_path(), "-c", self.conf_path],
                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -95,9 +106,15 @@ class MosquittoBroker:
 
     def reload(self, *_):
         """Re-read the CRL (and ACL): revoked devices can no longer connect."""
-        if self.proc and self.proc.poll() is None:
+        if not (self.proc and self.proc.poll() is None):
+            return
+        if hasattr(signal, "SIGHUP"):
             self.proc.send_signal(signal.SIGHUP)
             time.sleep(0.3)
+        else:
+            # Windows has no SIGHUP: restart the broker; clients reconnect on their own.
+            self.stop()
+            self.start()
 
     def stop(self):
         if self.proc and self.proc.poll() is None:

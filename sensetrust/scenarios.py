@@ -273,7 +273,6 @@ def s9_mqtt_transport(base):
     site.run(5)
     ca = site.gw.ca
     broker = MosquittoBroker(ca, os.path.join(base, "s9-broker"), port=port).start()
-    ca.on_revoke.append(broker.reload)
     bridge = MqttGatewayBridge(site.gw, port=port).start()
     lt = MqttDevice(site.dev["LT-101"], os.path.join(base, "s9-LT-101"), ca.ca_cert_path, port=port)
     try:
@@ -292,10 +291,14 @@ def s9_mqtt_transport(base):
         anon_conn = MqttDevice(site.dev["PT-101"], os.path.join(base, "s9-anon"), ca.ca_cert_path,
                                port=port, use_cert=False).connect()
 
+        # Revoked while connected: the gateway refuses the very next message. Then the
+        # broker reloads its revocation list and the device cannot reconnect.
         ca.revoke(site.dev["LT-101"].cert, "attack_detected")
         lt.publish(site.dev["LT-101"].envelope(value=1.41))
         after_revoke = bridge.wait_for(2)[-1]["decision"]
         lt.close()
+        broker.reload()
+        _t.sleep(1.0)
         reconnect = MqttDevice(site.dev["LT-101"], os.path.join(base, "s9-LT-101b"), ca.ca_cert_path,
                                port=port).connect()
     finally:
