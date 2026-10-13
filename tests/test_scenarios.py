@@ -1,4 +1,4 @@
-"""The seven demo scenarios, end to end, as a regression suite."""
+"""The demo scenarios, end to end, as a regression suite."""
 
 import pytest
 
@@ -12,6 +12,8 @@ def results(tmp_path_factory):
 
 @pytest.mark.parametrize("sid", [s[0] for s in scenarios.SCENARIOS])
 def test_scenario_passes(results, sid):
+    if results[sid]["passed"] is None:
+        pytest.skip(str(results[sid]["observed"].get("skipped", "scenario skipped")))
     assert results[sid]["passed"], results[sid]["observed"]
 
 

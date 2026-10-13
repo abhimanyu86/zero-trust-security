@@ -95,6 +95,10 @@ every revocation). Install it once:
 - Windows: run the installer from https://mosquitto.org/download/ (default folder is fine).
   You do not need to start the Mosquitto service; the scenario starts its own broker.
 
+SenseTrust looks for Mosquitto on the PATH and in `Program Files\mosquitto` (or `\mosquitto`)
+on drives C, D and E. If it is somewhere else, set `MOSQUITTO` to its folder, e.g. in Git Bash:
+`export MOSQUITTO="/d/Tools/mosquitto"`; in PowerShell: `$env:MOSQUITTO="D:\Tools\mosquitto"`.
+
 Without Mosquitto, S9 and `tests/test_mqtt.py` are skipped and everything else runs.
 
 ### Device enrolment

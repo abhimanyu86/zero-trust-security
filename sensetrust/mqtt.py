@@ -35,11 +35,21 @@ BRIDGE_ID = "gateway-mqtt"
 MQTT_NOT_AUTHORIZED = 135
 
 
-WINDOWS_MOSQUITTO = [r"C:\Program Files\mosquitto\mosquitto.exe",
-                     r"C:\Program Files (x86)\mosquitto\mosquitto.exe"]
+WINDOWS_MOSQUITTO = [drive + r":\Program Files\mosquitto\mosquitto.exe" for drive in "CDE"] + \
+                    [drive + r":\Program Files (x86)\mosquitto\mosquitto.exe" for drive in "CDE"] + \
+                    [drive + r":\mosquitto\mosquitto.exe" for drive in "CDE"]
 
 
 def mosquitto_path():
+    """
+    Where to find Mosquitto: the MOSQUITTO environment variable (the .exe or its folder),
+    then the PATH, then the usual Windows install folders on drives C, D and E.
+    """
+    env = os.environ.get("MOSQUITTO")
+    if env:
+        for candidate in (env, os.path.join(env, "mosquitto.exe"), os.path.join(env, "mosquitto")):
+            if os.path.isfile(candidate):
+                return candidate
     found = shutil.which("mosquitto")
     if found:
         return found
