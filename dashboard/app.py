@@ -47,7 +47,7 @@ def scripted():
             st.session_state.sid = sid
 
     r = st.session_state.result
-    st.subheader(("✅ " if r["passed"] else "❌ ") + choice)
+    st.subheader(("⏭️ " if r["passed"] is None else "✅ " if r["passed"] else "❌ ") + choice)
 
     if sid == "S2":
         o = r["observed"]

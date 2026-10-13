@@ -6,11 +6,11 @@ PY=${PYTHON:-python3}
 "$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' || {
   echo "Python 3.10 or newer is needed."; exit 1; }
 [ -x venv/bin/python ] || "$PY" -m venv venv
-if [ ! -f venv/.deps-installed ]; then
+if [ ! -f venv/.deps-installed-v2 ]; then
   echo "Installing dependencies (first run only)..."
   venv/bin/python -m pip install -q --upgrade pip
   venv/bin/python -m pip install -q -r requirements.txt
-  touch venv/.deps-installed
+  touch venv/.deps-installed-v2
 fi
 echo "Starting the mutual-TLS gateway on https://127.0.0.1:8443 ..."
 venv/bin/python -m sensetrust.server --data data &

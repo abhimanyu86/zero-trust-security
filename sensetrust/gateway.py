@@ -41,6 +41,7 @@ DENY_TO_PENALTY = [
     ("replay", "replay"),
     ("stale_timestamp", "stale_timestamp"),
     ("rate limit", "rate_limited"),
+    ("5G binding", "identity_mismatch"),
 ]
 
 
@@ -65,6 +66,8 @@ class Gateway:
         self._frame = {}
         self._certs = {}
         self.degraded = {}          # sensor -> reason: faulty, not hostile; kept out of control loops
+        self.pending_enrolments = {}  # device -> one-time token for the technician (reinstatement)
+        self.network = None           # optional FiveGBinding: SIM + slice must match the certificate
         self._last_attack_t = None
         self._lock = threading.RLock()
         self._telemetry_log = open(os.path.join(data_dir, "telemetry.sealed.jsonl"), "a")
@@ -105,6 +108,11 @@ class Gateway:
         self._event("quarantine", "critical", identity,
                     "identity quarantined and certificate revoked (%s)" % reason)
 
+    def _net(self, identity, kind, source_ip):
+        if self.network is None or identity is None:
+            return True, "not checked"
+        return self.network.check(identity, kind, source_ip)
+
     @property
     def under_attack(self):
         return (self._last_attack_t is not None
@@ -112,10 +120,11 @@ class Gateway:
 
     # ── telemetry ────────────────────────────────────────────────────────────
 
-    def telemetry(self, peer_cert, envelope):
+    def telemetry(self, peer_cert, envelope, source_ip=None):
         t0 = time.perf_counter()
         with self._lock:
             cert_ok, cert_reason, identity, role, cert = self._check_cert(peer_cert)
+            net_ok, net_reason = self._net(identity, "telemetry", source_ip)
             body = envelope.get("body", {}) if isinstance(envelope, dict) else {}
             sig_ok = cert is not None and verify_envelope(cert.public_key(), envelope)
             replay_ok, replay_reason = (self.replay.check(identity, body.get("nonce"),
@@ -126,7 +135,7 @@ class Gateway:
                    "cert_identity": identity, "claimed_identity": body.get("device_id"),
                    "sig_ok": sig_ok, "replay_ok": replay_ok, "replay_reason": replay_reason,
                    "rate_ok": rate_ok, "quarantined": self.trust.is_quarantined(identity),
-                   "trust": self.trust.score(identity)}
+                   "trust": self.trust.score(identity), "net_ok": net_ok, "net_reason": net_reason}
             decision = self.policy.decide_telemetry(ctx)
             if decision.allowed:
                 self.trust.reward(identity)
@@ -212,10 +221,11 @@ class Gateway:
         self.latency_us.append((time.perf_counter() - t0) * 1e6)
         return {"ok": True, "token": token, "score": result.score}
 
-    def command(self, peer_cert, token, envelope):
+    def command(self, peer_cert, token, envelope, source_ip=None):
         t0 = time.perf_counter()
         with self._lock:
             cert_ok, cert_reason, identity, role, cert = self._check_cert(peer_cert)
+            net_ok, net_reason = self._net(identity, "command", source_ip)
             body = envelope.get("body", {})
             try:
                 claims, token_ok, token_reason = self.tokens.verify(token, now=self.clock()), True, "ok"
@@ -231,7 +241,8 @@ class Gateway:
                    "action": body.get("action"), "sig_ok": sig_ok, "replay_ok": replay_ok,
                    "replay_reason": replay_reason, "now": self.clock(),
                    "plant_under_attack": self.under_attack,
-                   "target_quarantined": bool(target) and self.trust.is_quarantined(target)}
+                   "target_quarantined": bool(target) and self.trust.is_quarantined(target),
+                   "net_ok": net_ok, "net_reason": net_reason}
             decision = self.policy.decide_command(ctx)
             who = claims.get("sub", identity or "unknown")
             sev = {"allow": "info", "step_up": "warning", "deny": "warning"}[decision.effect]
@@ -243,18 +254,24 @@ class Gateway:
         return decision.as_dict()
 
     def _reinstate(self, identity, by):
-        """After maintenance: fresh key + certificate, trust reset. Old cert stays revoked."""
+        """
+        After maintenance: the old certificate stays revoked and a one-time enrolment token
+        is issued for the technician. The device must generate a NEW key on site and
+        enrol with it; until then everything it sends is still refused.
+        """
         role = "sensor" if identity in SENSORS else "actuator"
-        self.ca.issue(identity, role)
+        token = self.ca.create_enrolment_token(identity, role)
+        self.pending_enrolments[identity] = token
         self.trust._quarantined.pop(identity, None)
         self.trust._score[identity] = 0.7
         self.detector.alarmed.pop(identity, None)
         self.degraded.pop(identity, None)
-        self._event("reinstated", "info", identity, "new certificate issued, approved by %s" % by)
+        self._event("reinstated", "info", identity,
+                    "re-enrolment token issued, approved by %s; device must enrol a new key" % by)
 
     # ── machine-to-machine ───────────────────────────────────────────────────
 
-    def authorize_m2m(self, peer_cert, envelope, msg_type):
+    def authorize_m2m(self, peer_cert, envelope, msg_type, source_ip=None):
         """
         Trust service for device-to-device messages (e.g. LT-101 -> P-101 level feed).
         The receiving device asks: is this peer who it says, is the message intact and
@@ -263,6 +280,7 @@ class Gateway:
         t0 = time.perf_counter()
         with self._lock:
             cert_ok, cert_reason, identity, role, cert = self._check_cert(peer_cert)
+            net_ok, net_reason = self._net(identity, "m2m", source_ip)
             body = envelope.get("body", {})
             sig_ok = cert is not None and verify_envelope(cert.public_key(), envelope)
             replay_ok, replay_reason = (self.replay.check("m2m:" + str(identity), body.get("nonce"),
@@ -273,7 +291,7 @@ class Gateway:
                    "trust": self.trust.score(identity),
                    "quarantined": self.trust.is_quarantined(identity), "msg_type": msg_type,
                    "degraded": self.degraded.get(identity),
-                   "min_trust": M2M_MIN_TRUST}
+                   "min_trust": M2M_MIN_TRUST, "net_ok": net_ok, "net_reason": net_reason}
             decision = self.policy.decide_m2m(ctx)
             if not decision.allowed:
                 self._event("m2m_denied", "warning", identity or "unknown", "; ".join(decision.reasons))

@@ -9,14 +9,25 @@ still within its validity window and not revoked.
 
 Keys are ECDSA P-256: small, fast, and supported by the constrained TLS stacks on real
 field devices (mbedTLS, wolfSSL).
+
+Field devices never get a key from the CA. They generate their own key pair, prove they
+hold it by signing a certificate request (PKCS#10 CSR), and redeem a one-time enrolment
+token that an administrator created for that device ID and role (the EST pattern,
+RFC 7030). The CA stores certificates only, so a copy of the CA's disk gives an attacker
+no device keys. `issue()` (CA-generated key) remains for the gateway's own certificate,
+which lives on the same host as the CA, and for building attacker CAs in tests.
 """
 
 import datetime as dt
+import hashlib
+import hmac
 import ipaddress
 import json
 import os
+import secrets
 import ssl
 import threading
+import time
 
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
@@ -24,7 +35,15 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
-ROLES = ("sensor", "actuator", "console", "gateway")
+ROLES = ("sensor", "actuator", "console", "gateway", "broker", "service")
+SERVER_ROLES = ("gateway", "broker")      # TLS servers; everything else is a TLS client
+
+DEVICE_CERT_DAYS = 30                       # short-lived: renewed on site, automatically
+ENROLMENT_TOKEN_TTL_S = 24 * 3600
+
+
+class EnrolmentError(Exception):
+    pass
 
 
 def _now():
@@ -101,6 +120,14 @@ class CertificateAuthority:
         if os.path.exists(self._revoked_path):
             with open(self._revoked_path) as f:
                 self._revoked = json.load(f)
+        self._tokens_path = os.path.join(directory, "enrolment_tokens.json")
+        self._tokens = {}
+        if os.path.exists(self._tokens_path):
+            with open(self._tokens_path) as f:
+                self._tokens = json.load(f)
+        self.crl_path = os.path.join(directory, "crl.pem")
+        self.on_revoke = []          # callbacks, e.g. reload the MQTT broker's CRL
+        self.write_crl()
 
     @property
     def ca_cert_path(self):
@@ -112,21 +139,21 @@ class CertificateAuthority:
 
     # ── issuance ─────────────────────────────────────────────────────────────
 
-    def issue(self, identity, role, days=365, hostnames=()):
-        """Issue a key + certificate for `identity`. Returns (key, cert)."""
+    def _sign_cert(self, identity, role, public_key, days, hostnames=(), now=None):
         if role not in ROLES:
             raise ValueError("unknown role %r" % role)
-        key = ec.generate_private_key(ec.SECP256R1())
+        now = now or _now()
         subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, identity),
                              x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, role),
                              x509.NameAttribute(NameOID.ORGANIZATION_NAME, "YellowSense")])
-        eku = [ExtendedKeyUsageOID.SERVER_AUTH] if role == "gateway" else [ExtendedKeyUsageOID.CLIENT_AUTH]
+        eku = ([ExtendedKeyUsageOID.SERVER_AUTH] if role in SERVER_ROLES
+               else [ExtendedKeyUsageOID.CLIENT_AUTH])
         builder = (x509.CertificateBuilder()
                    .subject_name(subject).issuer_name(self.cert.subject)
-                   .public_key(key.public_key())
+                   .public_key(public_key)
                    .serial_number(x509.random_serial_number())
-                   .not_valid_before(_now() - dt.timedelta(minutes=5))
-                   .not_valid_after(_now() + dt.timedelta(days=days))
+                   .not_valid_before(now - dt.timedelta(minutes=5))
+                   .not_valid_after(now + dt.timedelta(days=days))
                    .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
                    .add_extension(x509.ExtendedKeyUsage(eku), critical=False))
         if hostnames:
@@ -138,13 +165,138 @@ class CertificateAuthority:
                     sans.append(x509.DNSName(h))
             builder = builder.add_extension(x509.SubjectAlternativeName(sans), critical=False)
         cert = builder.sign(self.key, hashes.SHA256())
-        key_path, crt_path = self.paths(identity)
+        with open(self.paths(identity)[1], "wb") as f:
+            f.write(cert.public_bytes(serialization.Encoding.PEM))
+        return cert
+
+    def issue(self, identity, role, days=365, hostnames=()):
+        """
+        CA-generated key + certificate. Returns (key, cert).
+
+        Only for identities that live on the CA host itself (the gateway, the broker, the
+        gateway's own MQTT client) and for attacker CAs in tests. Field devices enrol
+        with their own key instead: see `create_enrolment_token` and `enrol`.
+        """
+        key = ec.generate_private_key(ec.SECP256R1())
+        cert = self._sign_cert(identity, role, key.public_key(), days, hostnames)
+        key_path = self.paths(identity)[0]
         with open(key_path, "wb") as f:
             f.write(_key_pem(key))
         os.chmod(key_path, 0o600)
-        with open(crt_path, "wb") as f:
-            f.write(cert.public_bytes(serialization.Encoding.PEM))
         return key, cert
+
+    def current_cert(self, identity):
+        """The most recently issued certificate for `identity`, or None."""
+        path = self.paths(identity)[1]
+        if not os.path.exists(path):
+            return None
+        with open(path, "rb") as f:
+            return x509.load_pem_x509_certificate(f.read())
+
+    # ── enrolment: device-generated keys, one-time tokens ───────────────────
+
+    @staticmethod
+    def _token_hash(secret):
+        return hashlib.sha256(secret.encode()).hexdigest()
+
+    def _save_tokens(self):
+        tmp = self._tokens_path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(self._tokens, f, indent=2)
+        os.replace(tmp, self._tokens_path)
+
+    def create_enrolment_token(self, identity, role, ttl_s=ENROLMENT_TOKEN_TTL_S, now=None):
+        """
+        One-time token an administrator hands to the technician commissioning a device.
+        The token fixes the device ID and the role: a device cannot ask for more. Only a
+        hash of the secret is stored.
+        """
+        if role not in ROLES or role in SERVER_ROLES:
+            raise ValueError("devices cannot enrol as %r" % role)
+        now = now if now is not None else time.time()
+        token_id = secrets.token_hex(4)
+        secret = secrets.token_urlsafe(24)
+        with self._lock:
+            self._tokens[token_id] = {"identity": identity, "role": role,
+                                      "hash": self._token_hash(secret),
+                                      "expires": now + ttl_s, "used": False}
+            self._save_tokens()
+        return "%s.%s" % (token_id, secret)
+
+    def enrol(self, token, csr_pem, days=DEVICE_CERT_DAYS, now=None):
+        """
+        Redeem a one-time token with a CSR. Checks, in order: token exists, not used, not
+        expired, secret matches, CSR self-signature is valid (proof the requester holds
+        the private key), CSR names the device the token was issued for. The role comes
+        from the token, never from the CSR. Returns the issued certificate.
+        """
+        now_s = now if now is not None else time.time()
+        try:
+            token_id, secret = token.split(".", 1)
+        except (AttributeError, ValueError):
+            raise EnrolmentError("malformed enrolment token")
+        try:
+            csr = x509.load_pem_x509_csr(csr_pem if isinstance(csr_pem, bytes) else csr_pem.encode())
+        except ValueError:
+            raise EnrolmentError("unparseable CSR")
+        with self._lock:
+            rec = self._tokens.get(token_id)
+            if rec is None:
+                raise EnrolmentError("unknown enrolment token")
+            if rec["used"]:
+                raise EnrolmentError("enrolment token already used")
+            if now_s > rec["expires"]:
+                raise EnrolmentError("enrolment token expired")
+            if not hmac.compare_digest(rec["hash"], self._token_hash(secret)):
+                raise EnrolmentError("enrolment token secret does not match")
+            if not csr.is_signature_valid:
+                raise EnrolmentError("CSR signature invalid: requester does not hold the key")
+            cn = csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+            if not cn or cn[0].value != rec["identity"]:
+                raise EnrolmentError("CSR is for %r but the token is for %r"
+                                     % (cn[0].value if cn else None, rec["identity"]))
+            rec["used"] = True
+            rec["used_at"] = now_s
+            self._save_tokens()
+        return self._sign_cert(rec["identity"], rec["role"], csr.public_key(), days,
+                               now=dt.datetime.fromtimestamp(now_s, dt.timezone.utc))
+
+    def renew(self, presented_cert, csr_pem, days=DEVICE_CERT_DAYS, now=None):
+        """
+        Certificate renewal over mutual TLS. The device presents its current certificate
+        and a CSR for a *new* key. A revoked, expired or foreign certificate cannot renew,
+        so a quarantined device cannot talk its way back in. The old certificate is
+        revoked as superseded.
+        """
+        now_s = now if now is not None else time.time()
+        ok, reason, identity, role = self.verify(presented_cert)
+        if not ok:
+            raise EnrolmentError("renewal refused: " + reason)
+        if role in SERVER_ROLES:
+            raise EnrolmentError("renewal refused: server identities are not renewed this way")
+        presented_cert = load_cert(presented_cert)
+        current = self.current_cert(identity)
+        if current is None or current.serial_number != presented_cert.serial_number:
+            raise EnrolmentError("renewal refused: not the current certificate for %s" % identity)
+        try:
+            csr = x509.load_pem_x509_csr(csr_pem if isinstance(csr_pem, bytes) else csr_pem.encode())
+        except ValueError:
+            raise EnrolmentError("renewal refused: unparseable CSR")
+        if not csr.is_signature_valid:
+            raise EnrolmentError("renewal refused: CSR signature invalid")
+        cn = csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+        if not cn or cn[0].value != identity:
+            raise EnrolmentError("renewal refused: CSR names a different device")
+        old_pub = presented_cert.public_key().public_bytes(
+            serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+        new_pub = csr.public_key().public_bytes(
+            serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+        if old_pub == new_pub:
+            raise EnrolmentError("renewal refused: renewal must rotate to a new key")
+        cert = self._sign_cert(identity, role, csr.public_key(), days,
+                               now=dt.datetime.fromtimestamp(now_s, dt.timezone.utc))
+        self.revoke(presented_cert, "superseded")
+        return cert
 
     # ── revocation ───────────────────────────────────────────────────────────
 
@@ -157,6 +309,30 @@ class CertificateAuthority:
             with open(tmp, "w") as f:
                 json.dump(self._revoked, f, indent=2)
             os.replace(tmp, self._revoked_path)
+            self.write_crl()
+        for callback in list(self.on_revoke):
+            callback(cert)
+
+    def write_crl(self):
+        """
+        Publish the revocation list as a signed X.509 CRL, so components that do their
+        own TLS (the MQTT broker) refuse revoked devices at the handshake too.
+        """
+        now = _now()
+        builder = (x509.CertificateRevocationListBuilder()
+                   .issuer_name(self.cert.subject)
+                   .last_update(now - dt.timedelta(minutes=5))
+                   .next_update(now + dt.timedelta(days=1)))
+        for serial, rec in self._revoked.items():
+            when = dt.datetime.fromisoformat(rec["at"]) if rec.get("at") else now
+            builder = builder.add_revoked_certificate(
+                x509.RevokedCertificateBuilder().serial_number(int(serial))
+                .revocation_date(when).build())
+        crl = builder.sign(self.key, hashes.SHA256())
+        tmp = self.crl_path + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(crl.public_bytes(serialization.Encoding.PEM))
+        os.replace(tmp, self.crl_path)
 
     def is_revoked(self, cert):
         return str(load_cert(cert).serial_number) in self._revoked

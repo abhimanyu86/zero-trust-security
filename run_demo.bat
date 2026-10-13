@@ -54,7 +54,7 @@ if not exist venv\Scripts\python.exe (
   if "%PY:~0,3%"=="py " (%PY% -m venv venv) else ("%PY%" -m venv venv)
   if not exist venv\Scripts\python.exe goto :fail
 )
-if not exist venv\.deps-installed (
+if not exist venv\.deps-installed-v2 (
   echo [2/4] Installing dependencies - first run only, takes a few minutes...
   venv\Scripts\python -m pip install --disable-pip-version-check -q --upgrade pip
   venv\Scripts\python -m pip install --disable-pip-version-check --prefer-binary -r requirements.txt
@@ -65,7 +65,7 @@ if not exist venv\.deps-installed (
     rmdir /s /q venv
     goto :fail
   )
-  echo ok> venv\.deps-installed
+  echo ok> venv\.deps-installed-v2
 ) else (
   echo [2/4] Dependencies already installed.
 )
