@@ -1,0 +1,15 @@
+{
+  "_comment": "Sample subscriber table as provisioned in a private 5G core (Open5GS: subscriber records with a static UE IP; one DNN and address pool per slice in smf.yaml). Sample data for the PoC; PLMN 001/01 is the standard test network.",
+  "slices": {
+    "control":     {"pool": "10.45.0.0/24", "sst": 1, "sd": "000001", "dnn": "control"},
+    "telemetry":   {"pool": "10.46.0.0/24", "sst": 1, "sd": "000002", "dnn": "telemetry"},
+    "maintenance": {"pool": "10.47.0.0/24", "sst": 1, "sd": "000003", "dnn": "maintenance"}
+  },
+  "subscribers": [
+    {"identity": "LT-101",     "supi": "imsi-001010000000101", "ip": "10.46.0.11", "slice": "telemetry"},
+    {"identity": "PT-101",     "supi": "imsi-001010000000102", "ip": "10.46.0.12", "slice": "telemetry"},
+    {"identity": "FT-101",     "supi": "imsi-001010000000103", "ip": "10.46.0.13", "slice": "telemetry"},
+    {"identity": "console-02", "supi": "imsi-001010000000201", "ip": "10.45.0.21", "slice": "control"},
+    {"identity": "vendor-01",  "supi": "imsi-001010000000301", "ip": "10.47.0.31", "slice": "maintenance"}
+  ]
+}

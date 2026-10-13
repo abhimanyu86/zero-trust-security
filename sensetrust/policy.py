@@ -52,6 +52,8 @@ class PolicyEngine:
         replay_ok, replay_reason, rate_ok, quarantined, trust."""
         if not ctx["cert_ok"]:
             return deny("device identity rejected: " + ctx["cert_reason"])
+        if not ctx.get("net_ok", True):
+            return deny("5G binding: " + ctx["net_reason"])
         if ctx["role"] != "sensor":
             return deny("role %r may not publish telemetry" % ctx["role"])
         if ctx["claimed_identity"] != ctx["cert_identity"]:
@@ -73,6 +75,8 @@ class PolicyEngine:
         target_quarantined."""
         if not ctx["cert_ok"]:
             return deny("console identity rejected: " + ctx["cert_reason"])
+        if not ctx.get("net_ok", True):
+            return deny("5G binding: " + ctx["net_reason"])
         if ctx["role"] != "console":
             return deny("commands must come from an operator console")
         if not ctx["token_ok"]:
@@ -109,6 +113,8 @@ class PolicyEngine:
         quarantined, degraded, min_trust, msg_type."""
         if not ctx["cert_ok"]:
             return deny("peer identity rejected: " + ctx["cert_reason"])
+        if not ctx.get("net_ok", True):
+            return deny("5G binding: " + ctx["net_reason"])
         if not ctx["sig_ok"]:
             return deny("peer message signature invalid")
         if not ctx["replay_ok"]:

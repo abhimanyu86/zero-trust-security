@@ -316,6 +316,62 @@ def s9_mqtt_transport(base):
                          "reconnect_after_revocation": reconnect[1]}, "passed": ok}
 
 
+def s10_5g_binding(base):
+    """
+    Private 5G: the gateway checks that the certificate, the SIM's address and the slice
+    all match. Subscriber data is the sample table in config/5g_subscribers.json; the
+    5G core itself is not running in this PoC.
+    """
+    from .fiveg import FiveGBinding
+    site = Site(os.path.join(base, "s10"))
+    site.run(5)
+    gw = site.gw
+    gw.network = FiveGBinding.load(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "config", "5g_subscribers.json"))
+    lt = site.dev["LT-101"]
+
+    genuine = gw.telemetry(lt.cert, lt.envelope(value=1.40), source_ip="10.46.0.11")
+
+    rogue_ca = CertificateAuthority(os.path.join(base, "s10-rogue-ca"), name="Attacker CA")
+    thief = DeviceIdentity.commission(rogue_ca, "LT-101", "sensor", site.clock)
+    stolen_sim = gw.telemetry(thief.cert, thief.envelope(value=0.2), source_ip="10.46.0.11")
+
+    key_on_other_sim = gw.telemetry(lt.cert, lt.envelope(value=0.2), source_ip="10.46.0.12")
+    key_on_unknown_sim = gw.telemetry(lt.cert, lt.envelope(value=0.2), source_ip="10.46.0.99")
+
+    login = site.login("asha", console="console-02")
+    env = site.dev["console-02"].command("pump.force_on", "P-101")
+    on_control = gw.command(site.dev["console-02"].cert, login["token"], env, source_ip="10.45.0.21")
+    ft = site.dev["FT-101"]
+    sensor_cmd = gw.command(ft.cert, login["token"], ft.command("pump.force_on", "P-101"),
+                            source_ip="10.46.0.13")
+    lt_revoked = gw.ca.is_revoked(lt.cert)
+
+    vendor = DeviceIdentity.commission(gw.ca, "vendor-01", "service", site.clock)
+    maintenance = gw.telemetry(vendor.cert, vendor.envelope(value=0), source_ip="10.47.0.31")
+
+    wired = site.login("ravi", console="console-01")
+    wired_cmd = gw.command(site.dev["console-01"].cert, wired["token"],
+                           site.dev["console-01"].command("valve.set", "XV-101", position=0.5),
+                           source_ip="192.168.10.5")
+
+    ok = (genuine["effect"] == "allow" and stolen_sim["effect"] == "deny"
+          and key_on_other_sim["effect"] == "deny" and key_on_unknown_sim["effect"] == "deny"
+          and lt_revoked
+          and on_control["effect"] == "allow" and sensor_cmd["effect"] == "deny"
+          and "slice" in sensor_cmd["reasons"][0]
+          and maintenance["effect"] == "deny" and wired_cmd["effect"] == "allow")
+    return {"observed": {"genuine_LT101_on_its_SIM": genuine,
+                         "stolen_SIM_without_the_device_key": stolen_sim,
+                         "LT101_key_on_PT101_SIM": key_on_other_sim,
+                         "LT101_key_on_unknown_SIM": key_on_unknown_sim,
+                         "LT101_revoked_as_stolen_key": lt_revoked,
+                         "command_from_tablet_on_control_slice": on_control,
+                         "command_from_sensor_on_telemetry_slice": sensor_cmd,
+                         "vendor_on_closed_maintenance_slice": maintenance,
+                         "wired_console_unaffected": wired_cmd}, "passed": ok}
+
+
 SCENARIOS = [
     ("S1", "Rogue / cloned device", "Device identity, mTLS", s1_rogue_device),
     ("S2", "Stolen key + false data injection", "Anomaly detection, M2M trust, revocation", s2_stolen_key_false_data),
@@ -326,6 +382,7 @@ SCENARIOS = [
     ("S7", "Forged M2M interlock", "Machine-to-machine trust", s7_m2m_forgery),
     ("S8", "Device enrolment and renewal abuse", "Device identity lifecycle", s8_device_enrolment),
     ("S9", "MQTT: stolen key posts as another sensor", "Secure APIs over MQTT, encryption", s9_mqtt_transport),
+    ("S10", "5G: key and SIM must belong together", "Device identity on private 5G, slices", s10_5g_binding),
 ]
 
 
@@ -357,7 +414,7 @@ def main():
     width = max(len(r["name"]) for r in results)
     for r in results:
         status = "SKIP" if r["passed"] is None else ("PASS" if r["passed"] else "FAIL")
-        print("%s  %-*s  %s   [%s]" % (r["id"], width, r["name"], status, r["ps13"]))
+        print("%-3s  %-*s  %s   [%s]" % (r["id"], width, r["name"], status, r["ps13"]))
     s2 = next(r for r in results if r["id"] == "S2")["observed"]
     print("\nS2 physical impact: baseline overflow %ds (peak %.2f m, rim at %.1f m)  vs  zero-trust %ds (peak %.2f m)"
           % (s2["baseline"]["overflow_seconds"], s2["baseline"]["max_true_level_m"], OVERFLOW,

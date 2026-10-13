@@ -77,7 +77,7 @@ def make_handler(gw):
                 return self._send(400, {"error": "invalid JSON"})
             cert = self._peer_cert()
             if self.path == "/v1/telemetry":
-                d = gw.telemetry(cert, req)
+                d = gw.telemetry(cert, req, source_ip=self.client_address[0])
             elif self.path == "/v1/m2m/authorize":
                 d = gw.authorize_m2m(req.get("peer_cert"), req.get("envelope", {}), req.get("msg_type"))
             elif self.path == "/v1/operator/login":
@@ -85,7 +85,8 @@ def make_handler(gw):
                                    cv2.IMREAD_COLOR)
                 d = gw.operator_login(cert, req["operator_id"], req["minutiae"], img)
             elif self.path == "/v1/command":
-                d = gw.command(cert, req.get("token", ""), req.get("envelope", {}))
+                d = gw.command(cert, req.get("token", ""), req.get("envelope", {}),
+                               source_ip=self.client_address[0])
             else:
                 return self._send(404, {"error": "not found"})
             allowed = d.get("effect") == "allow" or d.get("ok") is True
@@ -178,8 +179,15 @@ def main():
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8443)
     ap.add_argument("--enrol-port", type=int, default=8444)
+    ap.add_argument("--5g-subscribers", dest="subscribers",
+                    help="JSON subscriber table from the 5G core (enables SIM + slice binding)")
     a = ap.parse_args()
     gw = Gateway(a.data)
+    if a.subscribers:
+        from .fiveg import FiveGBinding
+        gw.network = FiveGBinding.load(a.subscribers)
+        print("5G binding on: %d subscribers, slices %s"
+              % (len(gw.network.by_identity), ", ".join(gw.network.slices)))
     if not os.path.exists(gw.ca.paths("gateway")[1]):
         gw.ca.issue("gateway", "gateway", hostnames=("localhost", "127.0.0.1", a.host))
     httpd = serve(gw, a.host, a.port)
