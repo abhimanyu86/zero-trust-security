@@ -65,6 +65,7 @@ class Gateway:
         self._frame = {}
         self._certs = {}
         self.degraded = {}          # sensor -> reason: faulty, not hostile; kept out of control loops
+        self.pending_enrolments = {}  # device -> one-time token for the technician (reinstatement)
         self._last_attack_t = None
         self._lock = threading.RLock()
         self._telemetry_log = open(os.path.join(data_dir, "telemetry.sealed.jsonl"), "a")
@@ -243,14 +244,20 @@ class Gateway:
         return decision.as_dict()
 
     def _reinstate(self, identity, by):
-        """After maintenance: fresh key + certificate, trust reset. Old cert stays revoked."""
+        """
+        After maintenance: the old certificate stays revoked and a one-time enrolment token
+        is issued for the technician. The device must generate a NEW key on site and
+        enrol with it; until then everything it sends is still refused.
+        """
         role = "sensor" if identity in SENSORS else "actuator"
-        self.ca.issue(identity, role)
+        token = self.ca.create_enrolment_token(identity, role)
+        self.pending_enrolments[identity] = token
         self.trust._quarantined.pop(identity, None)
         self.trust._score[identity] = 0.7
         self.detector.alarmed.pop(identity, None)
         self.degraded.pop(identity, None)
-        self._event("reinstated", "info", identity, "new certificate issued, approved by %s" % by)
+        self._event("reinstated", "info", identity,
+                    "re-enrolment token issued, approved by %s; device must enrol a new key" % by)
 
     # ── machine-to-machine ───────────────────────────────────────────────────
 

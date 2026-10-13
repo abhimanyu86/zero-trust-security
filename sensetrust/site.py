@@ -37,10 +37,11 @@ class Site:
         self.now = self.t0 = 1_760_000_000.0
         self.clock = lambda: self.now
         self.gw = Gateway(data_dir, calibration=calibration, clock=self.clock)
-        for ident, role in DEVICES.items():
-            self.gw.ca.issue(ident, role)
+        # Every device generates its own key and enrols with a one-time token; the CA
+        # never holds a device key. Only the gateway's own identity is CA-generated.
         self.gw.ca.issue("gateway", "gateway", hostnames=("localhost", "127.0.0.1"))
-        self.dev = {i: DeviceIdentity.load(self.gw.ca, i, self.clock) for i in DEVICES}
+        self.dev = {i: DeviceIdentity.commission(self.gw.ca, i, role, self.clock)
+                    for i, role in DEVICES.items()}
         for op, spec in OPERATORS.items():
             self.gw.operators.enroll(op, spec["role"], self.finger(op), ridge_image(noise=0),
                                      spec["scopes"])
