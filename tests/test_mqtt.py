@@ -28,7 +28,6 @@ def plant(tmp_path):
     gw = Gateway(str(tmp_path / "gw"))
     port = _free_port()
     broker = MosquittoBroker(gw.ca, str(tmp_path / "broker"), port=port).start()
-    gw.ca.on_revoke.append(broker.reload)
     bridge = MqttGatewayBridge(gw, port=port).start()
     yield gw, broker, bridge, port, tmp_path
     bridge.stop()
@@ -74,9 +73,16 @@ def test_revocation_reaches_gateway_and_broker(plant):
     m = MqttDevice(dev, str(tmp / "lt"), gw.ca.ca_cert_path, port=port)
     assert m.connect()[0]
     gw.ca.revoke(dev.cert, "attack_detected")
+    # Gateway: the very next message from the revoked device is denied.
     m.publish(dev.envelope(value=1.0))
-    assert bridge.wait_for(1)[-1]["decision"]["effect"] == "deny"
+    got = bridge.wait_for(1)
+    assert got, "the gateway bridge received nothing"
+    assert got[-1]["decision"]["effect"] == "deny"
     m.close()
+    # Broker: once it re-reads the CRL, the revoked device cannot reconnect.
+    # (Done after the publish: on Windows a reload restarts the broker.)
+    broker.reload()
+    time.sleep(1)
     assert not MqttDevice(dev, str(tmp / "lt2"), gw.ca.ca_cert_path, port=port).connect()[0]
 
 
@@ -87,4 +93,5 @@ def test_broker_config_is_mtls_only(plant):
                  "tls_version tlsv1.3", "crlfile", "acl_file"):
         assert line in conf
     assert "allow_anonymous true" not in conf
-    assert oct(os.stat(broker.acl_path).st_mode)[-3:] == "600"
+    if os.name != "nt":   # Windows has no POSIX file modes
+        assert oct(os.stat(broker.acl_path).st_mode)[-3:] == "600"
