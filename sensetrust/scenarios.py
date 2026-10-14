@@ -375,6 +375,93 @@ def s10_5g_binding(base):
                          "wired_console_unaffected": wired_cmd}, "passed": ok}
 
 
+def s11_opcua_shadow(base):
+    """
+    Pilot-site mode. SenseTrust may only read the plant's OPC UA server (the PLC). The
+    LT-101 transmitter behind the PLC is compromised and reports the tank 65% low, so the
+    PLC overfills the tank. SenseTrust must spot it from physics alone and raise an
+    incident, without revoking or blocking anything. A rogue client and a client without
+    a certificate try to connect; SenseTrust tries to write a value.
+    """
+    try:
+        import asyncio
+        import socket
+
+        from asyncua import Client, ua
+        from .gateway import Gateway
+        from .opcua import OpcUaShadowMonitor, PlantOpcUaServer, SimulatedPlc
+    except ImportError:
+        return {"observed": {"skipped": "asyncua is not installed (pip install -r requirements.txt)"},
+                "passed": None}
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    start = 120
+
+    async def run():
+        gw = Gateway(os.path.join(base, "s11"))
+        server = await PlantOpcUaServer(gw.ca, os.path.join(base, "s11-plc"), port=port).start()
+        obs = {}
+        try:
+            eps = await Client(server.url).connect_and_get_server_endpoints()
+            obs["endpoints_offered"] = sorted({"%s/%s" % (e.SecurityPolicyUri.split("#")[-1],
+                                                          e.SecurityMode.name) for e in eps})
+            rogue = CertificateAuthority(os.path.join(base, "s11-rogue-ca"), name="Attacker CA")
+            try:
+                await OpcUaShadowMonitor(gw, server.url, ca=rogue).connect()
+                obs["rogue_client"] = "connected"
+            except Exception as e:
+                obs["rogue_client"] = "refused: %s" % (
+                    "BadCertificateUntrusted" if "Untrusted" in str(e) else type(e).__name__)
+            try:
+                async with Client(server.url):
+                    obs["no_certificate_client"] = "connected"
+            except Exception as e:
+                obs["no_certificate_client"] = "refused: %s" % str(e).split(",")[0][:60]
+
+            plc = SimulatedPlc(server)
+            mon = await OpcUaShadowMonitor(gw, server.url).connect()
+            try:
+                try:
+                    await mon.client.write_values([mon.nodes["LT-101"]], [2.9])
+                    obs["monitor_write_attempt"] = "accepted"
+                except ua.UaStatusCodeError as e:
+                    obs["monitor_write_attempt"] = "refused: %s" % type(e).__name__
+                detected_at = None
+                for _ in range(start + 300):
+                    if plc.t == start:
+                        plc.tamper = lambda t, s, v: v * 0.35 if s == "LT-101" and t > start else v
+                    await plc.step()
+                    if any(d.verdict == "attack" for d in await mon.poll()) and detected_at is None:
+                        detected_at = plc.t - start
+            finally:
+                await mon.disconnect()
+            obs["diagnoses"] = [(e["kind"], e["subject"]) for e in gw.events
+                                if e["kind"] in ("attack_detected", "fault_detected",
+                                                 "ambiguous_anomaly")]
+            obs["attack_detected_after_s"] = detected_at
+            obs["quarantined"] = sorted(gw.trust.quarantined())
+            obs["tickets"] = gw.tickets
+            obs["tank_level_at_end_m"] = round(plc.plant.h, 2)
+            obs["note"] = ("shadow mode alerts only: the PLC kept trusting LT-101; "
+                           "enforcement mode (S2) is what prevents the overflow")
+            return obs
+        finally:
+            await server.stop()
+            gw.close()
+
+    obs = asyncio.run(run())
+    passed = (obs["endpoints_offered"] == ["Basic256Sha256/SignAndEncrypt"]
+              and obs["rogue_client"].startswith("refused")
+              and obs["no_certificate_client"].startswith("refused")
+              and obs["monitor_write_attempt"].startswith("refused")
+              and obs["diagnoses"] == [("attack_detected", "LT-101")]
+              and obs["attack_detected_after_s"] is not None
+              and obs["quarantined"] == [])
+    return {"observed": obs, "passed": passed}
+
+
 SCENARIOS = [
     ("S1", "Rogue / cloned device", "Device identity, mTLS", s1_rogue_device),
     ("S2", "Stolen key + false data injection", "Anomaly detection, M2M trust, revocation", s2_stolen_key_false_data),
@@ -386,19 +473,9 @@ SCENARIOS = [
     ("S8", "Device enrolment and renewal abuse", "Device identity lifecycle", s8_device_enrolment),
     ("S9", "MQTT: stolen key posts as another sensor", "Secure APIs over MQTT, encryption", s9_mqtt_transport),
     ("S10", "5G: key and SIM must belong together", "Device identity on private 5G, slices", s10_5g_binding),
+    ("S11", "OPC UA shadow mode: compromised sensor behind the PLC",
+     "Anomaly detection on read-only plant data, secure OPC UA", s11_opcua_shadow),
 ]
-def test_s11_opcua_shadow():
-    """
-    Scenario S11: OPC UA shadow mode: compromised sensor behind the PLC
-    """
-    try:
-        import asyncua
-    except ImportError:
-        return {"scenario": "S11", "name": "OPC UA shadow mode: compromised sensor behind the PLC", "passed": None}
-
-    # Scenario logic matching S9/S10 style
-    passed = True
-    return {"scenario": "S11", "name": "OPC UA shadow mode: compromised sensor behind the PLC", "passed": passed}
 
 def load_calibration(path="results/calibration.pkl"):
     if os.path.exists(path):

@@ -4,7 +4,7 @@ SenseTrust demo dashboard.
     streamlit run dashboard/app.py
 
 Two pages: "Live plant" runs the gateway and the simulated plant in real time and lets you
-inject attacks and faults; "Scripted scenarios" runs the seven end-to-end scenarios.
+inject attacks and faults; "Scripted scenarios" runs the eleven end-to-end scenarios.
 """
 
 import json

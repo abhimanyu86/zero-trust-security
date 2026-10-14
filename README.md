@@ -53,8 +53,10 @@ engine is an open work item (see below).
 | S8 | New device enrols; attacker reuses its token, asks for a higher role, uses an expired token; quarantined device tries to renew | Device identity lifecycle | CA never holds the key; every abuse refused; renewal rotates the key and retires the old certificate |
 | S9 | Over MQTT (real Mosquitto broker): stolen LT-101 key posts as PT-101; rogue and certificate-less clients connect; LT-101 revoked | Secure APIs, encryption, M2M | broker refuses the publish (MQTT code 135) before the gateway; handshakes refused; revoked device's next message denied and reconnect refused |
 | S10 | Private 5G: stolen SIM without the key; key on another SIM; command from a sensor's slice; closed maintenance slice | Device identity, secure access | all denied; a key seen on the wrong SIM is treated as stolen and revoked |
+| S11 | Pilot-site shadow mode: SenseTrust may only read the PLC over OPC UA; the LT-101 transmitter behind the PLC is compromised; rogue and certificate-less clients connect; SenseTrust tries to write | Anomaly detection, secure access, encryption | attack flagged from physics in 3 s, incident ticket, nothing revoked; rogue and certificate-less clients refused; write refused |
 
-S9 needs Mosquitto installed (it shows SKIP otherwise; see below). S10 uses a sample subscriber
+S9 needs Mosquitto installed (it shows SKIP otherwise; see below). S11 needs `asyncua`
+(in `requirements.txt`). S10 uses a sample subscriber
 table (`config/5g_subscribers.json`); no live 5G core runs in this PoC.
 
 ## Live demo on your machine
@@ -73,15 +75,15 @@ end-to-end scenarios above.
 ```bash
 python -m venv venv && source venv/bin/activate      # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-python -m pytest tests -q                 # 67 tests: real mTLS sockets, real MQTT broker
-python -m sensetrust.scenarios            # the ten scenarios, PASS/FAIL
+python -m pytest tests -q                 # 76 tests: real mTLS sockets, real MQTT broker, real OPC UA
+python -m sensetrust.scenarios            # the eleven scenarios, PASS/FAIL
 streamlit run dashboard/app.py            # live demo dashboard
 python -m sensetrust.server --data data   # gateway https://127.0.0.1:8443 (mTLS), enrolment :8444
 python -m sensetrust.evaluate             # regenerate results/ (~10 min; --quick ~1.5 min)
 ```
 
 Or run `docker compose up` for the gateway (:8443, enrolment :8444) and the dashboard (:8501),
-and `docker compose run --rm scenarios` for all ten scenarios with Mosquitto included.
+and `docker compose run --rm scenarios` for all eleven scenarios with Mosquitto included.
 
 ### MQTT (scenario S9)
 
@@ -100,6 +102,24 @@ on drives C, D and E. If it is somewhere else, set `MOSQUITTO` to its folder, e.
 `export MOSQUITTO="/d/Tools/mosquitto"`; in PowerShell: `$env:MOSQUITTO="D:\Tools\mosquitto"`.
 
 Without Mosquitto, S9 and `tests/test_mqtt.py` are skipped and everything else runs.
+
+### OPC UA shadow mode (scenario S11)
+
+A pilot site will first let SenseTrust *read* its data and nothing else. `sensetrust/opcua.py`
+does exactly that:
+
+- `PlantOpcUaServer` stands in for the site's PLC or SCADA server (driven by the simulated
+  plant). It offers only `Basic256Sha256` with `SignAndEncrypt`, so there is no unsecured
+  endpoint. Its certificate comes from the plant CA. A client must present a plant-CA
+  certificate that is not on the revocation list, and every value is read-only to clients.
+- `OpcUaShadowMonitor` is SenseTrust's client. It checks that the server's certificate was
+  issued by the plant CA to a PLC, reads all values once per second in one request, and passes
+  them to `Gateway.shadow_tick`. That runs the same fault-vs-attack physics check, but only
+  raises alerts and tickets: it never revokes, quarantines or writes anything.
+
+OPC UA's security policy needs RSA keys, so OPC UA certificates are RSA-2048, signed by the same
+plant CA (`ca.issue_opcua`). In shadow mode the PLC keeps acting on the bad reading (the tank in
+S11 still overfills); preventing that is what enforcement mode (S2) adds once the site agrees.
 
 ### Device enrolment
 
@@ -127,9 +147,11 @@ telemetry slice, and the maintenance slice is closed by default.
 
 ```
 sensetrust/
-  ca.py           plant CA: enrolment tokens, CSR issuance, renewal, revocation + CRL, TLS 1.3
+  ca.py           plant CA: enrolment tokens, CSR issuance, renewal, revocation + CRL, TLS 1.3,
+                  OPC UA application certificates
   devices.py      device side: generates its own key, enrols, renews, signs every message
   mqtt.py         Mosquitto broker config (mTLS, ACL, CRL), device client, gateway bridge
+  opcua.py        OPC UA shadow mode: secured read-only PLC server (simulated) + SenseTrust monitor
   fiveg.py        private 5G binding: certificate + SIM address + slice must agree
   crypto.py       message signing, Ed25519 access tokens (sender-constrained), AES-256-GCM sealing
   gateway.py      policy enforcement point: identity -> integrity -> freshness -> behaviour -> policy
@@ -154,8 +176,9 @@ application/      COMET application answers
 **Technology readiness: proof of concept.** Everything above runs, and every number above is
 reproducible from this repository. What it isn't yet:
 
-- **Not field-tested.** The plant is simulated. Real deployment needs site historian data for
-  calibration and a read-only OPC UA adapter (MQTT is done).
+- **Not field-tested.** The plant is simulated, including the OPC UA server. The read-only
+  OPC UA adapter and MQTT are built; a real deployment still needs site historian data for
+  calibration and testing against the site's actual PLC or SCADA server.
 - **Device keys are generated on the device but stored in files.** The CA holds none of them.
   `tools/hsm_enrol_demo.py` shows enrolment and message signing with a key that cannot leave a
   PKCS#11 token, but Python's TLS library cannot use such a key, so the TLS handshake in this

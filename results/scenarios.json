@@ -267,9 +267,31 @@
     "name": "MQTT: stolen key posts as another sensor",
     "ps13": "Secure APIs over MQTT, encryption",
     "observed": {
-      "skipped": "mosquitto is not installed (see README: MQTT demo)"
+      "own_topic": {
+        "broker_reason_code": 0,
+        "gateway": {
+          "effect": "allow",
+          "reasons": [
+            "trust 1.00"
+          ]
+        }
+      },
+      "posting_as_PT-101": {
+        "broker_reason_code": 135,
+        "meaning": "135 = not authorised",
+        "reached_gateway": false
+      },
+      "attacker_ca_connect": "broker closed the connection (certificate rejected or revoked)",
+      "no_certificate_connect": "broker closed the connection (certificate rejected or revoked)",
+      "message_on_open_connection_after_revocation": {
+        "effect": "deny",
+        "reasons": [
+          "device identity rejected: certificate revoked (attack_detected)"
+        ]
+      },
+      "reconnect_after_revocation": "broker closed the connection (certificate rejected or revoked)"
     },
-    "passed": null
+    "passed": true
   },
   {
     "id": "S10",
@@ -325,6 +347,38 @@
           "valve.set by ravi"
         ]
       }
+    },
+    "passed": true
+  },
+  {
+    "id": "S11",
+    "name": "OPC UA shadow mode: compromised sensor behind the PLC",
+    "ps13": "Anomaly detection on read-only plant data, secure OPC UA",
+    "observed": {
+      "endpoints_offered": [
+        "Basic256Sha256/SignAndEncrypt"
+      ],
+      "rogue_client": "refused: BadCertificateUntrusted",
+      "no_certificate_client": "refused: No matching endpoints: 1",
+      "monitor_write_attempt": "refused: BadUserAccessDenied",
+      "diagnoses": [
+        [
+          "attack_detected",
+          "LT-101"
+        ]
+      ],
+      "attack_detected_after_s": 3,
+      "quarantined": [],
+      "tickets": [
+        {
+          "sensor": "LT-101",
+          "type": "incident",
+          "kind": "false_data_injection_step",
+          "shadow": true
+        }
+      ],
+      "tank_level_at_end_m": 3.2,
+      "note": "shadow mode alerts only: the PLC kept trusting LT-101; enforcement mode (S2) is what prevents the overflow"
     },
     "passed": true
   }
