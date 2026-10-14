@@ -267,31 +267,9 @@
     "name": "MQTT: stolen key posts as another sensor",
     "ps13": "Secure APIs over MQTT, encryption",
     "observed": {
-      "own_topic": {
-        "broker_reason_code": 0,
-        "gateway": {
-          "effect": "allow",
-          "reasons": [
-            "trust 1.00"
-          ]
-        }
-      },
-      "posting_as_PT-101": {
-        "broker_reason_code": 135,
-        "meaning": "135 = not authorised",
-        "reached_gateway": false
-      },
-      "attacker_ca_connect": "broker closed the connection (certificate rejected or revoked)",
-      "no_certificate_connect": "broker closed the connection (certificate rejected or revoked)",
-      "message_on_open_connection_after_revocation": {
-        "effect": "deny",
-        "reasons": [
-          "device identity rejected: certificate revoked (attack_detected)"
-        ]
-      },
-      "reconnect_after_revocation": "broker closed the connection (certificate rejected or revoked)"
+      "skipped": "mosquitto is not installed (see README: MQTT demo)"
     },
-    "passed": true
+    "passed": null
   },
   {
     "id": "S10",
