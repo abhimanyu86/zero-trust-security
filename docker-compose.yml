@@ -1,0 +1,17 @@
+services:
+  gateway:
+    build: .
+    command: python -m sensetrust.server --data /data --host 0.0.0.0 --port 8443 --enrol-port 8444
+    ports: ["8443:8443", "8444:8444"]
+    volumes: ["gateway-data:/data"]
+  dashboard:
+    build: .
+    command: streamlit run dashboard/app.py --server.address 0.0.0.0 --server.port 8501
+    ports: ["8501:8501"]
+  # docker compose run --rm scenarios   -> all ten scenarios, MQTT included
+  scenarios:
+    build: .
+    command: python -m sensetrust.scenarios
+    profiles: ["tools"]
+volumes:
+  gateway-data:

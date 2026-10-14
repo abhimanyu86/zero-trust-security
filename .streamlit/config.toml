@@ -1,0 +1,11 @@
+# Run without interactive prompts (older Streamlit versions asked for an email on first
+# run and waited) and without usage stats. The launchers open the browser themselves.
+[server]
+headless = true
+port = 8501
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
