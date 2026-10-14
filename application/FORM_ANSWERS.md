@@ -101,7 +101,7 @@ identifies which sensor disagrees, and then reads that sensor's own signal:
 - Gateway decision time: under 1 ms per request; biometric login under 25 ms.
 
 **Tech stack:** Python, `cryptography`, scikit-learn, Eclipse Mosquitto (MQTT over mutual TLS),
-Streamlit dashboard, Docker, 67 automated tests. Devices generate their own keys and enrol with
+OPC UA (read-only "shadow mode" for pilot sites), Streamlit dashboard, Docker, 76 automated tests. Devices generate their own keys and enrol with
 one-time tokens (the CA holds no device keys). For private 5G, the gateway checks that a
 device's certificate, its SIM's address and its network slice all match; this is tested
 against sample 5G core data, with end-to-end testing planned on the COMET testbed.
@@ -124,8 +124,9 @@ SITAA PoC, with an Android app and cloud backends.*
   of about 43%, and UIDAI's acceptance target is above 85% accuracy. **[Add any commercial or
   engagement terms you're able to disclose.]**
 - **SenseTrust PoC.** It is validated in a physics-based simulation of a water-treatment plant:
-  324 injected fault/attack episodes, 15 hours of normal operation, and 10 end-to-end attack
-  scenarios, including industrial MQTT through a real broker. All of it is reproducible from
+  324 injected fault/attack episodes, 15 hours of normal operation, and 11 end-to-end attack
+  scenarios, including industrial MQTT through a real broker and a read-only OPC UA "shadow
+  mode" of the kind a pilot site would allow first. All of it is reproducible from
   our repository.
 - **Not yet field-tested on a live plant.** A pilot site is the main thing we are asking COMET
   to help with.
@@ -152,7 +153,7 @@ Upload the PDF export of the SenseTrust deck.
 
 | Months | Milestone |
 |---|---|
-| 0–3 | Hardware-backed device keys (TPM/secure element); OPC UA + MQTT adapters; IEC 62443 gap analysis |
+| 0–3 | Hardware-backed device keys (TPM/secure element); OPC UA and MQTT adapters tested against a real site's PLC/SCADA; IEC 62443 gap analysis |
 | 3–6 | Shadow-mode pilot on a live site; site-specific calibration; red-team test |
 | 6–9 | Fingerprint engine: on-device pipeline, improved real-capture accuracy toward the UIDAI >85% target |
 | 9–12 | 5G identity and slice-aware policy on the COMET testbed; first paid deployment |

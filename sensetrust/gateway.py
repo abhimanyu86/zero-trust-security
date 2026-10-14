@@ -68,6 +68,7 @@ class Gateway:
         self.degraded = {}          # sensor -> reason: faulty, not hostile; kept out of control loops
         self.pending_enrolments = {}  # device -> one-time token for the technician (reinstatement)
         self.network = None           # optional FiveGBinding: SIM + slice must match the certificate
+        self.shadow_suspects = set()  # shadow mode: sensors flagged as attacked (alert only)
         self._last_attack_t = None
         self._lock = threading.RLock()
         self._telemetry_log = open(os.path.join(data_dir, "telemetry.sealed.jsonl"), "a")
@@ -182,6 +183,49 @@ class Gateway:
                     self.degraded[d.sensor] = d.kind
                     if self.trust.penalise(d.sensor, "ambiguous_anomaly"):
                         self._quarantine(d.sensor, "ambiguous_anomaly")
+            return diagnoses
+
+    def shadow_tick(self, readings, pump, valve):
+        """
+        Shadow (monitor-only) mode, for a pilot site where SenseTrust may only read.
+
+        Readings come from the plant's own OPC UA server instead of signed device
+        messages, so there is no per-device identity to check here: the physics check is
+        the whole job. Same diagnosis as `process_tick`, but the response is an alert and
+        a ticket only. Nothing is quarantined or revoked and no trust score changes; the
+        site's own team decides what to do.
+
+        Sensors already flagged are left out of later checks, as in `process_tick`, so
+        one bad instrument cannot make the honest ones look wrong.
+        """
+        with self._lock:
+            readings = {s: (None if s in self.degraded or s in self.shadow_suspects
+                            else readings.get(s)) for s in SENSORS}
+            diagnoses = self.detector.update(readings, pump, valve)
+            for d in diagnoses:
+                ev = d.as_dict()
+                if d.verdict == "attack":
+                    self.shadow_suspects.add(d.sensor)
+                    self._event("attack_detected", "critical", d.sensor,
+                                "%s — sensor disagrees with plant physics (shadow mode: "
+                                "alert only, nothing revoked)" % d.kind,
+                                diagnosis=ev, shadow=True)
+                    self.tickets.append({"sensor": d.sensor, "type": "incident", "kind": d.kind,
+                                         "shadow": True})
+                elif d.verdict == "fault":
+                    self._event("fault_detected", "info", d.sensor,
+                                "%s — maintenance ticket raised" % d.kind,
+                                diagnosis=ev, shadow=True)
+                    self.tickets.append({"sensor": d.sensor, "type": "maintenance", "kind": d.kind,
+                                         "shadow": True})
+                    self.degraded[d.sensor] = d.kind
+                else:
+                    self._event("ambiguous_anomaly", "warning", d.sensor,
+                                "slow divergence: calibration drift or stealth attack — "
+                                "inspection ticket", diagnosis=ev, shadow=True)
+                    self.tickets.append({"sensor": d.sensor, "type": "inspect", "kind": d.kind,
+                                         "shadow": True})
+                    self.degraded[d.sensor] = d.kind
             return diagnoses
 
     def safe_level(self):

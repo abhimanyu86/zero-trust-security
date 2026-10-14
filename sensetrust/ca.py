@@ -32,13 +32,13 @@ import time
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
-ROLES = ("sensor", "actuator", "console", "gateway", "broker", "service")
-SERVER_ROLES = ("gateway", "broker")      # TLS servers; everything else is a TLS client
+ROLES = ("sensor", "actuator", "console", "gateway", "broker", "plc", "service")
+SERVER_ROLES = ("gateway", "broker", "plc")      # TLS servers; everything else is a TLS client
 
-DEVICE_CERT_DAYS = 30                     # short-lived: renewed on site, automatically
+DEVICE_CERT_DAYS = 30                       # short-lived: renewed on site, automatically
 ENROLMENT_TOKEN_TTL_S = 24 * 3600
 
 
@@ -126,7 +126,7 @@ class CertificateAuthority:
             with open(self._tokens_path) as f:
                 self._tokens = json.load(f)
         self.crl_path = os.path.join(directory, "crl.pem")
-        self.on_revoke = []           # callbacks, e.g. reload the MQTT broker's CRL
+        self.on_revoke = []          # callbacks, e.g. reload the MQTT broker's CRL
         self.write_crl()
 
     @property
@@ -139,7 +139,8 @@ class CertificateAuthority:
 
     # ── issuance ─────────────────────────────────────────────────────────────
 
-    def _sign_cert(self, identity, role, public_key, days, hostnames=(), now=None, uri=None):
+    def _sign_cert(self, identity, role, public_key, days, hostnames=(), now=None, uri=None,
+                   opcua=False):
         if role not in ROLES:
             raise ValueError("unknown role %r" % role)
         now = now or _now()
@@ -147,7 +148,7 @@ class CertificateAuthority:
                              x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, role),
                              x509.NameAttribute(NameOID.ORGANIZATION_NAME, "YellowSense")])
         eku = ([ExtendedKeyUsageOID.SERVER_AUTH] if role in SERVER_ROLES
-                else [ExtendedKeyUsageOID.CLIENT_AUTH])
+               else [ExtendedKeyUsageOID.CLIENT_AUTH])
         builder = (x509.CertificateBuilder()
                    .subject_name(subject).issuer_name(self.cert.subject)
                    .public_key(public_key)
@@ -156,39 +157,60 @@ class CertificateAuthority:
                    .not_valid_after(now + dt.timedelta(days=days))
                    .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
                    .add_extension(x509.ExtendedKeyUsage(eku), critical=False))
-        
         sans = []
-        if hostnames:
-            for h in hostnames:
-                try:
-                    sans.append(x509.IPAddress(ipaddress.ip_address(h)))
-                except ValueError:
-                    sans.append(x509.DNSName(h))
+        for h in hostnames:
+            try:
+                sans.append(x509.IPAddress(ipaddress.ip_address(h)))
+            except ValueError:
+                sans.append(x509.DNSName(h))
         if uri:
+            # OPC UA identifies applications by an "application URI" carried in the SAN.
             sans.append(x509.UniformResourceIdentifier(uri))
         if sans:
             builder = builder.add_extension(x509.SubjectAlternativeName(sans), critical=False)
-
+        if opcua:
+            # OPC UA Part 6 requires these key usages on application instance certificates.
+            builder = builder.add_extension(
+                x509.KeyUsage(digital_signature=True, content_commitment=True,
+                              key_encipherment=True, data_encipherment=True,
+                              key_agreement=False, key_cert_sign=False, crl_sign=False,
+                              encipher_only=False, decipher_only=False), critical=True)
         cert = builder.sign(self.key, hashes.SHA256())
         with open(self.paths(identity)[1], "wb") as f:
             f.write(cert.public_bytes(serialization.Encoding.PEM))
         return cert
 
-    def issue(self, identity, role, public_key=None, days=DEVICE_CERT_DAYS, hostnames=(), uri=None, now=None):
-        """Issue a certificate where the CA generates the key. Returns (key, cert)."""
-        key_path, crt_path = self.paths(identity)
-        if public_key is None:
-            key = ec.generate_private_key(ec.SECP256R1())
-            with open(key_path, "wb") as f:
-                f.write(_key_pem(key))
-            os.chmod(key_path, 0o600)
-            public_key = key.public_key()
-        else:
-            key = None
-            if os.path.exists(key_path):
-                with open(key_path, "rb") as f:
-                    key = serialization.load_pem_private_key(f.read(), password=None)
-        cert = self._sign_cert(identity, role, public_key, days, hostnames, now, uri)
+    def issue(self, identity, role, days=365, hostnames=()):
+        """
+        CA-generated key + certificate. Returns (key, cert).
+
+        Only for identities that live on the CA host itself (the gateway, the broker, the
+        gateway's own MQTT client) and for attacker CAs in tests. Field devices enrol
+        with their own key instead: see `create_enrolment_token` and `enrol`.
+        """
+        key = ec.generate_private_key(ec.SECP256R1())
+        cert = self._sign_cert(identity, role, key.public_key(), days, hostnames)
+        key_path = self.paths(identity)[0]
+        with open(key_path, "wb") as f:
+            f.write(_key_pem(key))
+        os.chmod(key_path, 0o600)
+        return key, cert
+
+    def issue_opcua(self, identity, role, uri, hostnames=(), days=365):
+        """
+        Certificate for an OPC UA application (the plant's PLC/SCADA server, or our
+        read-only monitor). OPC UA's Basic256Sha256 security policy needs an RSA-2048
+        key, the application URI in the certificate, and the key usages OPC UA lists;
+        the certificate is still signed by this plant CA, so the same trust root and
+        revocation list apply. Returns (key, cert).
+        """
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        cert = self._sign_cert(identity, role, key.public_key(), days, hostnames,
+                               uri=uri, opcua=True)
+        key_path = self.paths(identity)[0]
+        with open(key_path, "wb") as f:
+            f.write(_key_pem(key))
+        os.chmod(key_path, 0o600)
         return key, cert
 
     def current_cert(self, identity):
@@ -212,6 +234,11 @@ class CertificateAuthority:
         os.replace(tmp, self._tokens_path)
 
     def create_enrolment_token(self, identity, role, ttl_s=ENROLMENT_TOKEN_TTL_S, now=None):
+        """
+        One-time token an administrator hands to the technician commissioning a device.
+        The token fixes the device ID and the role: a device cannot ask for more. Only a
+        hash of the secret is stored.
+        """
         if role not in ROLES or role in SERVER_ROLES:
             raise ValueError("devices cannot enrol as %r" % role)
         now = now if now is not None else time.time()
@@ -225,6 +252,12 @@ class CertificateAuthority:
         return "%s.%s" % (token_id, secret)
 
     def enrol(self, token, csr_pem, days=DEVICE_CERT_DAYS, now=None):
+        """
+        Redeem a one-time token with a CSR. Checks, in order: token exists, not used, not
+        expired, secret matches, CSR self-signature is valid (proof the requester holds
+        the private key), CSR names the device the token was issued for. The role comes
+        from the token, never from the CSR. Returns the issued certificate.
+        """
         now_s = now if now is not None else time.time()
         try:
             token_id, secret = token.split(".", 1)
@@ -257,6 +290,12 @@ class CertificateAuthority:
                                now=dt.datetime.fromtimestamp(now_s, dt.timezone.utc))
 
     def renew(self, presented_cert, csr_pem, days=DEVICE_CERT_DAYS, now=None):
+        """
+        Certificate renewal over mutual TLS. The device presents its current certificate
+        and a CSR for a *new* key. A revoked, expired or foreign certificate cannot renew,
+        so a quarantined device cannot talk its way back in. The old certificate is
+        revoked as superseded.
+        """
         now_s = now if now is not None else time.time()
         ok, reason, identity, role = self.verify(presented_cert)
         if not ok:
@@ -303,6 +342,10 @@ class CertificateAuthority:
             callback(cert)
 
     def write_crl(self):
+        """
+        Publish the revocation list as a signed X.509 CRL, so components that do their
+        own TLS (the MQTT broker) refuse revoked devices at the handshake too.
+        """
         now = _now()
         builder = (x509.CertificateRevocationListBuilder()
                    .issuer_name(self.cert.subject)
@@ -328,6 +371,12 @@ class CertificateAuthority:
     # ── verification ─────────────────────────────────────────────────────────
 
     def verify(self, cert, expected_role=None):
+        """
+        Full check of a presented certificate. Returns (ok, reason, identity, role).
+
+        Checks, in order: issued by this CA (signature), inside its validity window,
+        not revoked, and — when asked — carries the expected role.
+        """
         if cert is None:
             return False, "no client certificate", None, None
         try:
@@ -351,6 +400,7 @@ class CertificateAuthority:
     # ── TLS contexts ─────────────────────────────────────────────────────────
 
     def server_context(self, identity):
+        """Gateway side: TLS 1.3 only, client certificate REQUIRED (mutual TLS)."""
         key_path, crt_path = self.paths(identity)
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.minimum_version = ssl.TLSVersion.TLSv1_3
@@ -360,6 +410,7 @@ class CertificateAuthority:
         return ctx
 
     def client_context(self, identity):
+        """Device side: presents its own certificate, pins the plant CA for the server."""
         key_path, crt_path = self.paths(identity)
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         ctx.minimum_version = ssl.TLSVersion.TLSv1_3
