@@ -222,7 +222,7 @@ function mapSvg() {
       <line class="rim" x1="${TANK.x - 6}" x2="${TANK.x + TANK.w + 6}" y1="${rimY}" y2="${rimY}"/>
       <text x="${TANK.x + 6}" y="${rimY - 6}" font-size="11" fill="#C62828">overflow</text>
       <text x="${TANK.x + 10}" y="${TANK.y + TANK.h - 30}" font-family="var(--head)" font-weight="800" font-size="20" id="lvl">0.00 m</text>
-      <text x="${TANK.x + 10}" y="${TANK.y + TANK.h - 12}" font-size="11.5" fill="#2B2B2B">true level</text>
+      <text x="${TANK.x + 10}" y="${TANK.y + TANK.h - 12}" font-size="11.5" fill="#1A1A1A">true level</text>
       <line class="lie" id="lie" x1="${TANK.x - 14}" x2="${TANK.x + 28}" y1="0" y2="0" visibility="hidden"/>
       <text id="lie-t" x="${TANK.x - 18}" y="0" text-anchor="end" font-size="12" fill="#C62828" font-weight="700" visibility="hidden"></text></g>`;
   s += `<g id="pkts"></g></svg>`;
@@ -256,7 +256,7 @@ function packets(svg) {
       const el = document.createElementNS(SVGNS, 'circle');
       el.setAttribute('r', 4);
       el.setAttribute('class', 'pkt');
-      el.setAttribute('fill', deny ? '#C62828' : '#F9A825');
+      el.setAttribute('fill', deny ? '#C62828' : '#EB7009');
       el.setAttribute('stroke', '#fff');
       el.setAttribute('stroke-width', 1.2);
       layer.appendChild(el);
@@ -283,7 +283,7 @@ function mountOverview(host) {
     </div>
   </div>
   <div class="panel chart" style="margin-top:18px"><header><h2>Tank level</h2><span class="hint">last 5 minutes of plant time</span></header>
-    ${legend([['#2B2B2B', 'True level'], ['#C62828', 'LT-101 reports'], ['#0F6E78', 'Pump control uses', true]])}
+    ${legend([['#1A1A1A', 'True level'], ['#C62828', 'LT-101 reports'], ['#0F6E78', 'Pump control uses', true]])}
     <svg id="ov-chart"></svg></div>`;
   const svg = $('.map svg', host);
   const pk = packets(svg);
@@ -336,7 +336,7 @@ function mountOverview(host) {
       svg.parentNode.classList.toggle('rogue', Date.now() < rogueUntil);
       prev = s;
       lineChart($('#ov-chart'), s.series, { h: 210, ymax: 3.2, rule: p.rim, xfmt: clock, xstep: 60,
-        series: [{ i: 1, color: '#2B2B2B' }, { i: 2, color: '#C62828' }, { i: 3, color: '#0F6E78', dash: '6 4' }] });
+        series: [{ i: 1, color: '#1A1A1A' }, { i: 2, color: '#C62828' }, { i: 3, color: '#0F6E78', dash: '6 4' }] });
       const open = s.incidents.filter(i => i.status !== 'resolved').slice(0, 3);
       paint($('#ov-inc'), open.length ? `<div class="list">${open.map(i => incidentItem(i)).join('')}</div>`
         : '<div class="empty">Nothing needs attention. Use "Simulate an event" to stage one.</div>');
@@ -463,16 +463,16 @@ function mountMobility(host) {
       <div class="panel"><header><h2>What happened</h2></header><div class="body" id="mob-out"><div class="empty">Run a drive to see MOBI-GUARD and SenseTrust work together.</div></div></div>
     </div>
     <div class="panel cellmap"><header><h2>Six 5G cells, one vehicle</h2><span class="hint" id="mob-hint">triangles are cells</span></header>
-      ${legend([['#2B2B2B', 'TRK-07, the real vehicle'], ['#C62828', 'reports signed with its copied key']])}<svg id="mob-svg" viewBox="0 0 880 500"></svg></div></div>`;
+      ${legend([['#1A1A1A', 'TRK-07, the real vehicle'], ['#C62828', 'reports signed with its copied key']])}<svg id="mob-svg" viewBox="0 0 880 500"></svg></div></div>`;
   let timer = null;
   window.addEventListener('hashchange', () => clearInterval(timer), { once: true });
   const svg = $('#mob-svg', host);
   const X = x => 40 + (x + 300) / 4300 * 800, Y = y => 460 - (y + 100) / 2000 * 420;
   function draw(r, upto) {
     let g = '';
-    r.cells.forEach(c => { g += `<path d="M${X(c.x)} ${Y(c.y) - 12} l10 18 h-20 z" fill="#F9A825"/><text x="${X(c.x)}" y="${Y(c.y) - 18}" text-anchor="middle" font-size="12" fill="#6B6B6B">${c.id.replace('_', ' ')}</text>`; });
+    r.cells.forEach(c => { g += `<path d="M${X(c.x)} ${Y(c.y) - 12} l10 18 h-20 z" fill="#EB7009"/><text x="${X(c.x)}" y="${Y(c.y) - 18}" text-anchor="middle" font-size="12" fill="#6B6B6B">${c.id.replace('_', ' ')}</text>`; });
     const pts = r.real.filter(p => p.t <= upto);
-    g += `<polyline fill="none" stroke="#2B2B2B" stroke-width="2.6" stroke-linejoin="round" points="${pts.map(p => `${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ')}"/>`;
+    g += `<polyline fill="none" stroke="#1A1A1A" stroke-width="2.6" stroke-linejoin="round" points="${pts.map(p => `${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ')}"/>`;
     const last = pts[pts.length - 1];
     r.copies.filter(c => c.t <= upto).forEach(c => {
       const caught = c.verdict === 'impossible' || c.effect !== 'allow';
@@ -481,7 +481,7 @@ function mountMobility(host) {
     });
     if (last) {
       const revoked = r.revoked_t != null && upto >= r.revoked_t;
-      g += `<circle cx="${X(last.x)}" cy="${Y(last.y)}" r="9" fill="${revoked ? '#FDECEA' : '#FDD835'}" stroke="${revoked ? '#C62828' : '#2B2B2B'}" stroke-width="2"/>`;
+      g += `<circle cx="${X(last.x)}" cy="${Y(last.y)}" r="9" fill="${revoked ? '#FDECEA' : '#FFAE09'}" stroke="${revoked ? '#C62828' : '#1A1A1A'}" stroke-width="2"/>`;
       g += `<text x="${X(last.x) + 14}" y="${Y(last.y) - 10}" font-size="12.5" font-weight="700">TRK-07</text>`;
       if (last.next && !revoked) g += `<text x="${X(last.x) + 14}" y="${Y(last.y) + 6}" font-size="11.5" fill="#6B6B6B">next: ${last.next.replace('_', ' ')}${last.conf != null ? ' (' + Math.round(last.conf * 100) + '%)' : ''}</text>`;
       if (revoked) g += `<text x="${X(last.x) + 14}" y="${Y(last.y) + 6}" font-size="11.5" fill="#C62828">identity revoked</text>`;
@@ -534,12 +534,12 @@ function mountPilot(host) {
         <div class="panel kpi"><span>Detected after</span><b class="num">${r.detected_after != null ? r.detected_after + ' s' : '—'}</b></div>
         <div class="panel kpi"><span>Blocked or revoked</span><b class="num">${r.revoked.length}</b><small>shadow mode never acts</small></div></div>
         <div class="panel chart"><header><h2>What the PLC reported</h2><span class="hint">OPC UA ${esc(r.endpoint)}, plant-CA certificates on both sides</span></header>
-          ${legend([['#2B2B2B', 'True level'], ['#C62828', 'LT-101 reports']])}<svg id="p-chart"></svg></div>
+          ${legend([['#1A1A1A', 'True level'], ['#C62828', 'LT-101 reports']])}<svg id="p-chart"></svg></div>
         ${r.alerts.length ? `<div class="panel"><header><h2>Alerts raised</h2></header><div class="body"><ul class="timeline">${r.alerts.map(a => `<li><b class="num">${clock(a.t)}</b>${esc(a.sensor)}: ${esc(a.detail)}</li>`).join('')}</ul></div></div>` : ''}
         ${r.overflow_s ? `<div class="panel"><div class="body" style="font-size:14px">The tank overflowed for <b>${r.overflow_s} s</b>: in shadow mode the PLC keeps trusting the bad sensor. Enforcement mode is what prevents this; on the Overview, the same attack causes no overflow.</div></div>` : ''}`;
       lineChart($('#p-chart'), r.series, { ymax: 3.2, rule: 3.0, xfmt: clock, xstep: 60,
         marks: r.change_at ? [{ x: r.change_at, color: '#6B6B6B', label: r.case === 'attack' ? 'attack starts' : 'fault starts' }] : [],
-        series: [{ i: 1, color: '#2B2B2B' }, { i: 2, color: '#C62828' }] });
+        series: [{ i: 1, color: '#1A1A1A' }, { i: 2, color: '#C62828' }] });
     } catch (err) { toast(err.message, true); }
     btn.disabled = false; btn.textContent = 'Run session';
   });
@@ -583,9 +583,9 @@ function mountScenarios(host) {
     const v = !r ? '' : r.running ? '<span class="spinner"></span>' : r.passed === true ? '<span class="verdict pass">Passed</span>' : r.passed === false ? '<span class="verdict fail">Failed</span>' : '<span class="verdict skip">Skipped: a dependency is not installed</span>';
     $('#sc-detail').innerHTML = `<span class="tag warning">${esc(s.ps13)}</span><h2 style="font:800 22px var(--head);margin:8px 0 6px">${s.id}: ${esc(s.name)}</h2>
       <p style="margin:0 0 14px">${esc(s.story)}</p><div class="toolbar"><button class="btn primary" data-run="${s.id}" ${r && r.running ? 'disabled' : ''}>Run against the gateway</button>${v}</div>
-      ${r && r.series ? `<div class="chart">${legend([['#2B2B2B', 'True level'], ['#C62828', 'LT-101 reports'], ['#0F6E78', 'Pump control uses', true]])}<svg id="sc-chart"></svg></div>` : ''}
+      ${r && r.series ? `<div class="chart">${legend([['#1A1A1A', 'True level'], ['#C62828', 'LT-101 reports'], ['#0F6E78', 'Pump control uses', true]])}<svg id="sc-chart"></svg></div>` : ''}
       ${r && r.observed ? `<dl class="dl obs">${flatten(r.observed).map(([k, val]) => `<dt>${esc(k)}</dt><dd>${esc(val)}</dd>`).join('')}</dl>` : ''}`;
-    if (r && r.series) lineChart($('#sc-chart'), r.series, { ymax: 3.2, rule: 3.0, xstep: 60, series: [{ i: 1, color: '#2B2B2B' }, { i: 2, color: '#C62828' }, { i: 3, color: '#0F6E78', dash: '6 4' }] });
+    if (r && r.series) lineChart($('#sc-chart'), r.series, { ymax: 3.2, rule: 3.0, xstep: 60, series: [{ i: 1, color: '#1A1A1A' }, { i: 2, color: '#C62828' }, { i: 3, color: '#0F6E78', dash: '6 4' }] });
   }
   host.addEventListener('click', async e => {
     const pick = e.target.closest('[data-sc]');
@@ -625,6 +625,12 @@ document.addEventListener('click', async e => {
   if (t.closest('[data-close]')) closeModal();
 });
 $('#sim-btn').addEventListener('click', () => drawer(true));
+function setRail(collapsed) {
+  document.querySelector('.app').classList.toggle('collapsed', collapsed);
+  try { localStorage.setItem('st-rail', collapsed ? '1' : '0'); } catch (e) { /* storage unavailable */ }
+}
+$('#rail-toggle').addEventListener('click', () => setRail(!document.querySelector('.app').classList.contains('collapsed')));
+try { if (localStorage.getItem('st-rail') === '1') setRail(true); } catch (e) { /* storage unavailable */ }
 $('#drawer-close').addEventListener('click', () => drawer(false));
 $('#scrim').addEventListener('click', () => { drawer(false); closeModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { drawer(false); closeModal(); } });
