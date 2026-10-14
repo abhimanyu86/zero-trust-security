@@ -20,6 +20,7 @@ RECOVERY_PER_MESSAGE = 0.002
 PENALTY = {
     "bad_signature": 0.35,
     "identity_mismatch": 0.5,
+    "impossible_movement": 0.5,    # one identity seen in two places at once: a repeat revokes it
     "replay": 0.35,
     "stale_timestamp": 0.1,
     "rate_limited": 0.05,

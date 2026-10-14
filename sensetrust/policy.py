@@ -71,6 +71,12 @@ class PolicyEngine:
             return deny("device quarantined")
         return Decision("allow", ["trust %.2f" % ctx["trust"]])
 
+    def decide_mobility(self, ctx):
+        """A moving device's radio report: same checks as telemetry, for vehicles and sensors."""
+        if ctx["role"] in ("vehicle", "sensor"):
+            ctx = {**ctx, "role": "sensor"}
+        return self.decide_telemetry(ctx)
+
     def decide_command(self, ctx):
         """ctx: cert_ok, cert_reason, role, token_ok, token_reason, claims,
         cert_serial, action, sig_ok, replay_ok, replay_reason, now, plant_under_attack,

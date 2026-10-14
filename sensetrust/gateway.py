@@ -69,6 +69,7 @@ class Gateway:
         self.pending_enrolments = {}  # device -> one-time token for the technician (reinstatement)
         self.awaiting_new_key = set() # reinstated, but its new certificate has not been seen yet
         self.network = None           # optional FiveGBinding: SIM + slice must match the certificate
+        self.mobility = None          # optional mobility.MobilityTrust (MOBI-GUARD bridge)
         self.shadow_suspects = set()  # shadow mode: sensors flagged as attacked (alert only)
         self._last_attack_t = None
         self._lock = threading.RLock()
@@ -157,6 +158,57 @@ class Gateway:
                     self._penalise_for(identity, decision.reasons)
         self.latency_us.append((time.perf_counter() - t0) * 1e6)
         return decision.as_dict()
+
+    def mobility_report(self, peer_cert, envelope, source_ip=None):
+        """
+        A moving device (vehicle, mobile robot, field handset) reports its radio picture:
+        serving cell, neighbour signals, speed, heading. Identity, signature, freshness and
+        rate are checked like any message; then MOBI-GUARD's view of the device decides
+        whether this report can come from the same device as the last ones, and what
+        handover to prepare. Returns the decision plus "mobility" (verdict, evidence, advice).
+        """
+        if self.mobility is None:
+            from .mobility import MobilityTrust
+            self.mobility = MobilityTrust()
+        t0 = time.perf_counter()
+        with self._lock:
+            cert_ok, cert_reason, identity, role, cert = self._check_cert(peer_cert)
+            net_ok, net_reason = self._net(identity, "telemetry", source_ip)
+            body = envelope.get("body", {}) if isinstance(envelope, dict) else {}
+            sig_ok = cert is not None and verify_envelope(cert.public_key(), envelope)
+            replay_ok, replay_reason = (self.replay.check(identity, body.get("nonce"),
+                                                          body.get("ts", 0), body.get("seq"))
+                                        if cert_ok and sig_ok else (True, "not checked"))
+            rate_ok = self.rate.allow(identity) if cert_ok else True
+            ctx = {"cert_ok": cert_ok, "cert_reason": cert_reason, "role": role,
+                   "cert_identity": identity, "claimed_identity": body.get("device_id"),
+                   "sig_ok": sig_ok, "replay_ok": replay_ok, "replay_reason": replay_reason,
+                   "rate_ok": rate_ok, "quarantined": self.trust.is_quarantined(identity),
+                   "trust": self.trust.score(identity), "net_ok": net_ok, "net_reason": net_reason}
+            decision = self.policy.decide_mobility(ctx).as_dict()
+            if decision["effect"] != "allow":
+                self._event("mobility_denied", "warning", identity or "unknown",
+                            "; ".join(decision["reasons"]))
+                if cert_ok:
+                    self._penalise_for(identity, decision["reasons"])
+                decision["mobility"] = None
+            else:
+                m = self.mobility.check(identity, body.get("radio", {}),
+                                        trust_score=self.trust.score(identity),
+                                        quarantined=self.trust.is_quarantined(identity))
+                decision["mobility"] = m
+                if m["verdict"] == "impossible":
+                    ev = m["evidence"]
+                    self._event("impossible_movement", "critical", identity,
+                                "one identity in two places at once: %s (report from %s)"
+                                % (ev.get("why", "impossible movement"), ev.get("cell")),
+                                evidence=ev)
+                    if self.trust.penalise(identity, "impossible_movement"):
+                        self._quarantine(identity, "impossible_movement: cloned key or SIM")
+                else:
+                    self.trust.reward(identity)
+        self.latency_us.append((time.perf_counter() - t0) * 1e6)
+        return decision
 
     def process_tick(self, pump, valve):
         """Run the physics check over this second's accepted telemetry."""

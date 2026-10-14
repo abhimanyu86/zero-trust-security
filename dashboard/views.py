@@ -257,6 +257,100 @@ def _pilot_report(rep):
                    "the Attack lab, where the same attack causes no overflow)." % rep["overflow"])
 
 
+# ── Mobility (MOBI-GUARD) ───────────────────────────────────────────────────
+
+def mobility_page():
+    st.title("Mobility: MOBI-GUARD and trust")
+    st.markdown(
+        "Moving machines change cell as they go. **MOBI-GUARD** predicts each one's next cell, "
+        "says how sure it is, and prepares the handover. **SenseTrust** checks that every report "
+        "comes from the one device that holds the identity: a copy reporting from somewhere "
+        "else breaks the signal track MOBI-GUARD is following, and the identity is revoked. "
+        "Handovers are only prepared for devices SenseTrust trusts.")
+    from sensetrust import mobility
+    if not mobility.available():
+        st.warning("MOBI-GUARD dependencies are not installed. Run: pip install -r requirements.txt")
+        return
+    c1, c2 = st.columns([2, 1])
+    copy = c1.radio("What happens", ["The service vehicle drives its route, including an unplanned exit",
+                                     "Someone copied its key and reports as TRK-07 from elsewhere"], index=1)
+    c2.write("")
+    if c2.button("Run drive", type="primary", use_container_width=True):
+        with st.spinner("Driving TRK-07 through six cells…"):
+            st.session_state.mobility = _run_mobility(copy.startswith("Someone"))
+    rep = st.session_state.get("mobility")
+    if rep:
+        _mobility_report(rep)
+
+
+def _run_mobility(with_copy):
+    import time as _t
+    from sensetrust import mobility
+    from sensetrust.devices import DeviceIdentity
+    from sensetrust.gateway import Gateway
+    clock = {"t": 1_760_000_000.0}
+    gw = Gateway(tempfile.mkdtemp(prefix="sensetrust-mob-"), clock=lambda: clock["t"])
+    truck = DeviceIdentity.commission(gw.ca, "TRK-07", "vehicle", lambda: clock["t"])
+    drive = mobility.trajectory("highway_exit", seed=7)
+    other = mobility.trajectory("urban_grid", seed=11)
+    rows, advice, alarm_t, refused = [], {}, None, 0
+    for k, r in enumerate(drive):
+        clock["t"] = 1_760_000_000.0 + r["timestamp"]
+        d = gw.mobility_report(truck.cert, truck.envelope(radio=r))
+        m = d.get("mobility")
+        if d["effect"] != "allow":
+            refused += 1
+        if m:
+            advice[m["advice"]["action"]] = advice.get(m["advice"]["action"], 0) + 1
+        rows.append({"x": r["x"], "y": r["y"], "who": "TRK-07 (real)", "t": k,
+                     "cell": r["current_cell"],
+                     "next": (m or {}).get("prediction", {}) and m["prediction"]["next_cell"],
+                     "conf": (m or {}).get("prediction", {}) and m["prediction"]["confidence"]})
+        if with_copy and k >= 70 and k % 5 == 0 and k < len(other):
+            f = dict(other[k], timestamp=r["timestamp"] + 0.5)
+            d = gw.mobility_report(truck.cert, truck.envelope(radio=f))
+            rows.append({"x": f["x"], "y": f["y"], "who": "copy of TRK-07", "t": k,
+                         "cell": f["current_cell"], "next": None, "conf": None})
+            if alarm_t is None and any(e["kind"] == "impossible_movement" for e in gw.events):
+                alarm_t = k
+    cells = [{"x": c.x, "y": c.y, "cell": cid} for cid, c in mobility._cache["network"].cells.items()]
+    events = [{"Event": e["kind"].replace("_", " "), "Detail": e["detail"]} for e in gw.events
+              if e["kind"] in ("impossible_movement", "quarantine")]
+    out = {"rows": rows, "cells": cells, "advice": advice, "alarm_t": alarm_t, "refused": refused,
+           "revoked": gw.trust.is_quarantined("TRK-07"), "events": events, "copy": with_copy}
+    gw.close()
+    return out
+
+
+def _mobility_report(rep):
+    import altair as alt
+    c = st.columns(4)
+    real = [r for r in rep["rows"] if r["who"] == "TRK-07 (real)"]
+    c[0].metric("Reports checked", len(rep["rows"]))
+    c[1].metric("Handovers prepared", rep["advice"].get("PROACTIVE_CANDIDATE", 0) +
+                rep["advice"].get("RE_EVALUATING", 0))
+    c[2].metric("Copy caught at", "t = %d s" % rep["alarm_t"] if rep["alarm_t"] is not None else
+                ("no copy" if not rep["copy"] else "not caught"))
+    c[3].metric("TRK-07 identity", "revoked" if rep["revoked"] else "trusted")
+    df = pd.DataFrame(rep["rows"])
+    cells = pd.DataFrame(rep["cells"])
+    path = alt.Chart(df[df.who == "TRK-07 (real)"]).mark_line(color=ui.INK, strokeWidth=2).encode(
+        x=alt.X("x:Q", title="metres east"), y=alt.Y("y:Q", title="metres north"), order="t:Q")
+    copies = alt.Chart(df[df.who != "TRK-07 (real)"]).mark_point(
+        color=ui.ALARM, size=70, filled=True).encode(x="x:Q", y="y:Q", tooltip=["t", "cell"])
+    towers = alt.Chart(cells).mark_point(shape="triangle-up", size=160, color=ui.AMBER,
+                                         filled=True).encode(x="x:Q", y="y:Q")
+    names = alt.Chart(cells).mark_text(dy=-14, color=ui.INK).encode(x="x:Q", y="y:Q", text="cell:N")
+    st.altair_chart((towers + names + path + copies).properties(height=380), use_container_width=True)
+    st.caption("Black line: the real vehicle's drive, including the exit ramp. Red dots: reports "
+               "signed with its copied key from another part of the site. Triangles: 5G cells.")
+    st.markdown("**MOBI-GUARD's advice for the real vehicle:** " + ", ".join(
+        "%s %d" % (k.replace("_", " ").lower(), v) for k, v in sorted(rep["advice"].items())) +
+        ". *Hold* is what SenseTrust forces while the identity is under suspicion.")
+    if rep["events"]:
+        st.dataframe(pd.DataFrame(rep["events"]), hide_index=True, use_container_width=True)
+
+
 # ── Attack lab ──────────────────────────────────────────────────────────────
 
 LAB = [

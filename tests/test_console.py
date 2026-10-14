@@ -9,7 +9,7 @@ from streamlit.testing.v1 import AppTest      # noqa: E402
 
 APP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                    "dashboard", "app.py")
-PAGES = ["overview", "incidents", "devices", "lab", "scenarios", "pilot"]
+PAGES = ["overview", "incidents", "devices", "lab", "scenarios", "pilot", "mobility"]
 
 
 def _render(page, dashboard_dir):
@@ -28,7 +28,8 @@ def _render(page, dashboard_dir):
     views.PAGES.setdefault("incidents", st.Page(views.incidents, title="Incidents",
                                                 url_path="incidents"))
     {"overview": views.overview, "incidents": views.incidents, "devices": views.devices,
-     "lab": views.lab, "scenarios": views.scenarios_page, "pilot": views.pilot}[page]()
+     "lab": views.lab, "scenarios": views.scenarios_page, "pilot": views.pilot,
+     "mobility": views.mobility_page}[page]()
 
 
 @pytest.mark.parametrize("page", PAGES)

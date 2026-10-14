@@ -35,7 +35,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
-ROLES = ("sensor", "actuator", "console", "gateway", "broker", "plc", "service")
+ROLES = ("sensor", "actuator", "console", "vehicle", "gateway", "broker", "plc", "service")
 SERVER_ROLES = ("gateway", "broker", "plc")      # TLS servers; everything else is a TLS client
 
 DEVICE_CERT_DAYS = 30                       # short-lived: renewed on site, automatically

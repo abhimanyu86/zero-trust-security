@@ -35,6 +35,7 @@ if "engine" not in st.session_state:
 def _reset():
     st.session_state.engine = LivePlant()
     st.session_state.pop("pilot", None)
+    st.session_state.pop("mobility", None)
 
 
 pages = {
@@ -42,12 +43,13 @@ pages = {
     "incidents": st.Page(views.incidents, title="Incidents", url_path="incidents"),
     "devices": st.Page(views.devices, title="Devices and identity", url_path="devices"),
     "pilot": st.Page(views.pilot, title="Pilot: shadow mode", url_path="pilot"),
+    "mobility": st.Page(views.mobility_page, title="Mobility (MOBI-GUARD)", url_path="mobility"),
     "lab": st.Page(views.lab, title="Attack lab", url_path="lab"),
     "scenarios": st.Page(views.scenarios_page, title="Scripted scenarios", url_path="scenarios"),
 }
 views.PAGES.update(pages)
 nav = st.navigation({"Operate": [pages["overview"], pages["incidents"], pages["devices"]],
-                     "Prove": [pages["pilot"], pages["lab"], pages["scenarios"]]})
+                     "Prove": [pages["mobility"], pages["pilot"], pages["lab"], pages["scenarios"]]})
 
 with st.sidebar:
     st.markdown("### SenseTrust")
