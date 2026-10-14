@@ -282,3 +282,37 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .app.collapsed .clock b { font-size: 14px; }
 .btn.primary { color: var(--ink); }
 .kpi b, .topbar h1, .panel > header h2 { letter-spacing: -.015em; }
+
+/* welcome and guided tour */
+.btn.big { padding: 11px 20px; font-size: 15px; border-radius: 10px; }
+.welcome { position: fixed; inset: 0; z-index: 60; background: var(--paper); display: grid; place-items: center; overflow: auto; padding: 32px 16px; animation: fadein .35s ease; }
+.welcome[hidden], .tour[hidden] { display: none; }
+@keyframes fadein { from { opacity: 0; } }
+.rings { position: fixed; width: 900px; height: 900px; right: -260px; top: -240px; pointer-events: none; overflow: visible; }
+.rings circle { fill: none; stroke: var(--brand); stroke-width: 26; opacity: .16; stroke-dasharray: 1400 60; animation: ring 1.4s ease both; }
+.rings circle:nth-child(2) { stroke: var(--brand-deep); opacity: .12; animation-delay: .12s; }
+.rings circle:nth-child(3) { opacity: .2; animation-delay: .24s; }
+.rings circle:nth-child(4) { stroke: var(--brand-deep); opacity: .14; animation-delay: .36s; }
+@keyframes ring { from { stroke-dashoffset: 1460; } to { stroke-dashoffset: 0; } }
+.wcard { position: relative; max-width: 880px; width: 100%; }
+.wbrand { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: .02em; }
+.wbrand img { width: 30px; height: 30px; }
+.welcome h1 { font: 800 clamp(44px, 7vw, 76px)/1 var(--head); margin: 22px 0 14px; letter-spacing: -.03em; }
+.wlead { font-size: 19px; line-height: 1.5; max-width: 620px; margin: 0 0 30px; }
+.wq { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.wq > div { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 16px; box-shadow: var(--shadow); animation: rise .5s ease both; }
+.wq > div:nth-child(2) { animation-delay: .1s; }
+.wq > div:nth-child(3) { animation-delay: .2s; }
+.wq b { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--brand); font: 800 15px var(--head); }
+.wq h3 { font: 700 16px/1.3 var(--head); margin: 14px 0 6px; }
+.wq p { margin: 0; color: var(--muted); font-size: 14px; }
+.wnote { color: var(--muted); font-size: 14px; margin: 26px 0 18px; max-width: 640px; }
+.wbtns { display: flex; gap: 12px; flex-wrap: wrap; }
+.tour { position: fixed; inset: 0; z-index: 55; }
+.spot { position: fixed; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(26, 26, 26, .55); outline: 3px solid var(--brand); transition: all .3s ease; pointer-events: none; }
+.tip { position: fixed; width: 320px; background: var(--panel); border-radius: 14px; padding: 16px 18px 14px; box-shadow: 0 18px 50px rgba(26, 26, 26, .3); transition: top .3s ease, left .3s ease; }
+.tipstep { color: var(--brand-deep); font-weight: 700; font-size: 12px; }
+.tip h3 { font: 800 17px var(--head); margin: 4px 0 6px; }
+.tip p { margin: 0 0 14px; font-size: 14px; color: var(--muted); line-height: 1.5; }
+.tipbtns { display: flex; gap: 8px; align-items: center; }
+@media (max-width: 760px) { .wq { grid-template-columns: 1fr; } .rings { display: none; } .tip { width: calc(100vw - 32px); } }

@@ -633,11 +633,80 @@ $('#rail-toggle').addEventListener('click', () => setRail(!document.querySelecto
 try { if (localStorage.getItem('st-rail') === '1') setRail(true); } catch (e) { /* storage unavailable */ }
 $('#drawer-close').addEventListener('click', () => drawer(false));
 $('#scrim').addEventListener('click', () => { drawer(false); closeModal(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { drawer(false); closeModal(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { drawer(false); closeModal(); if (!$('#welcome').hidden) welcome(false); } });
 $('#run-btn').addEventListener('click', async () => { if (S) { await api('/api/plant', { running: !S.running }); refresh(); } });
 $('#reset-btn').addEventListener('click', async () => { await api('/api/plant', { reset: true }); ui.incident = null; toast('Fresh plant started'); refresh(); });
 window.addEventListener('hashchange', route);
 
+/* ── welcome and guided tour ─────────────────────────────────────────────── */
+
+const TOUR = [
+  ['#sim-btn', 'Play the attacker', 'Open this on any page to stage an attack or a real fault on the live plant. Try "Stolen key: LT-101 lies" first.'],
+  ['.map', 'Watch every message', 'Each dot is one message travelling to the gateway. Refused ones stop red at the shield. The tank shows the true level next to what a lying sensor claims.'],
+  ['#pill', 'The plant at a glance', 'Green when every device and reading checks out. It turns red when an attack is contained and teal when a device needs maintenance.'],
+  ['[data-page=incidents]', 'Act on what happened', 'Each incident says what happened, what SenseTrust did and what to do next. Critical actions ask for the supervisor\'s fingerprint.'],
+  ['[data-page=devices]', 'Every machine\'s identity', 'Certificates, trust scores and private 5G bindings. Revoke a device or commission a new one here.'],
+  ['[data-page=mobility]', 'Machines that move', 'MOBI-GUARD predicts where a vehicle connects next; SenseTrust catches a copied identity reporting from somewhere else.'],
+  ['#help-btn', 'Come back any time', 'This button brings back the welcome screen and this tour.'],
+];
+let tourAt = 0;
+
+function welcome(show) {
+  $('#welcome').hidden = !show;
+  if (!show) { try { localStorage.setItem('st-welcomed', '1'); } catch (e) { /* storage unavailable */ } }
+  else $('#tour-start').focus();
+}
+
+function placeTour() {
+  const [sel, title, text] = TOUR[tourAt];
+  const el = document.querySelector(sel);
+  if (!el) return;
+  const r = el.getBoundingClientRect(), pad = 6;
+  Object.assign($('#spot').style, { top: r.top - pad + 'px', left: r.left - pad + 'px', width: r.width + pad * 2 + 'px', height: r.height + pad * 2 + 'px' });
+  $('#tip-step').textContent = `Step ${tourAt + 1} of ${TOUR.length}`;
+  $('#tip-title').textContent = title;
+  $('#tip-text').textContent = text;
+  $('#tip-back').disabled = tourAt === 0;
+  $('#tip-next').textContent = tourAt === TOUR.length - 1 ? 'Finish' : 'Next';
+  const tip = $('#tip'), tw = 320, th = tip.offsetHeight || 190, vw = innerWidth, vh = innerHeight;
+  let top = r.bottom + 14, left = Math.min(Math.max(16, r.left), vw - tw - 16);
+  if (top + th > vh - 16) top = Math.max(16, r.top - th - 14);
+  if (r.height > vh * 0.5) { top = Math.max(16, r.top + 16); left = r.right + 16 + tw < vw ? r.right + 16 : Math.max(16, r.left + 16); }
+  Object.assign(tip.style, { top: top + 'px', left: left + 'px' });
+}
+
+function tour(step) {
+  if (step >= TOUR.length || step < 0) { $('#tour').hidden = true; return; }
+  tourAt = step;
+  $('#tour').hidden = false;
+  const el = document.querySelector(TOUR[step][0]);
+  if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'instant' });
+  requestAnimationFrame(placeTour);
+  $('#tip-next').focus();
+}
+
+$('#help-btn').addEventListener('click', () => welcome(true));
+$('#welcome-skip').addEventListener('click', () => welcome(false));
+$('#tour-start').addEventListener('click', () => {
+  welcome(false);
+  if (!location.hash.startsWith('#/overview') && location.hash) location.hash = '#/overview';
+  if (document.querySelector('.app').classList.contains('collapsed')) setRail(false);
+  setTimeout(() => tour(0), 250);
+});
+$('#tip-next').addEventListener('click', () => tour(tourAt + 1));
+$('#tip-back').addEventListener('click', () => tour(tourAt - 1));
+$('#tip-skip').addEventListener('click', () => tour(-1));
+window.addEventListener('resize', () => { if (!$('#tour').hidden) placeTour(); });
+document.addEventListener('keydown', e => {
+  if ($('#tour').hidden) return;
+  if (e.key === 'Escape') tour(-1);
+  if (e.key === 'ArrowRight') tour(tourAt + 1);
+  if (e.key === 'ArrowLeft') tour(tourAt - 1);
+});
+
 buildDrawer();
 route();
 poll();
+let welcomed = false;
+try { welcomed = localStorage.getItem('st-welcomed') === '1'; } catch (e) { /* storage unavailable */ }
+if (!welcomed) welcome(true);

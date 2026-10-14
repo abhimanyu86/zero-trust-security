@@ -41,6 +41,7 @@
       <button class="iconbtn" id="rail-toggle" title="Show or hide the menu" aria-label="Show or hide the menu"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
       <div><h1 id="title">Overview</h1><div class="sub" id="subtitle"></div></div>
       <div class="grow"></div>
+      <button class="iconbtn" id="help-btn" title="Welcome and guided tour" aria-label="Welcome and guided tour"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.8-.9 1.4v.6M12 17h.01"/></svg></button>
       <span class="pill" id="pill"><i></i><span id="pill-text">Connecting</span></span>
       <button class="btn primary" id="sim-btn"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Simulate an event</button>
     </header>
@@ -59,6 +60,32 @@
   <div class="card" id="modal-card"></div>
 </div>
 <div class="toasts" id="toasts" aria-live="polite"></div>
+
+<div class="welcome" id="welcome" role="dialog" aria-modal="true" aria-labelledby="welcome-title" hidden>
+  <svg class="rings" viewBox="0 0 600 600" aria-hidden="true">
+    <circle cx="300" cy="300" r="290"/><circle cx="300" cy="300" r="230"/><circle cx="300" cy="300" r="170"/><circle cx="300" cy="300" r="110"/>
+  </svg>
+  <div class="wcard">
+    <div class="wbrand"><img src="/static/yellowsense-mark.png" alt=""><span>YellowSense Technologies</span></div>
+    <h1 id="welcome-title">SenseTrust</h1>
+    <p class="wlead">Zero-trust security for machines on industrial and private 5G networks. Nothing is trusted because of where it comes from: every message proves itself.</p>
+    <div class="wq">
+      <div><b>1</b><h3>Is this machine who it says it is?</h3><p>Each device holds its own key and certificate. Every message is signed and checked.</p></div>
+      <div><b>2</b><h3>Is this person who they say they are?</h3><p>Critical commands need a fresh fingerprint and liveness check.</p></div>
+      <div><b>3</b><h3>Does what it says obey physics?</h3><p>Readings must agree with the plant. That catches even a stolen key.</p></div>
+    </div>
+    <p class="wnote">This console runs the real gateway in front of a simulated water plant at 6x speed. You can play the attacker and watch it respond.</p>
+    <div class="wbtns"><button class="btn primary big" id="tour-start">Take the 1-minute tour</button><button class="btn big" id="welcome-skip">Explore on my own</button></div>
+  </div>
+</div>
+
+<div class="tour" id="tour" hidden>
+  <div class="spot" id="spot"></div>
+  <div class="tip" id="tip" role="dialog" aria-live="polite">
+    <div class="tipstep" id="tip-step"></div><h3 id="tip-title"></h3><p id="tip-text"></p>
+    <div class="tipbtns"><button class="btn small" id="tip-skip">End tour</button><span style="flex:1"></span><button class="btn small" id="tip-back">Back</button><button class="btn small primary" id="tip-next">Next</button></div>
+  </div>
+</div>
 <script src="/static/app.js"></script>
 </body>
 </html>
