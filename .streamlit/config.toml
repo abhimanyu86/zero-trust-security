@@ -9,3 +9,11 @@ gatherUsageStats = false
 
 [client]
 toolbarMode = "minimal"
+
+# YellowSense look: white and yellow, quiet when normal.
+[theme]
+base = "light"
+primaryColor = "#F9A825"
+backgroundColor = "#FFFDF7"
+secondaryBackgroundColor = "#FFF9E6"
+textColor = "#2B2B2B"

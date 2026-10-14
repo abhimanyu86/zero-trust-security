@@ -148,3 +148,50 @@ def test_enrolment_endpoint_over_tls(tmp_path):
     finally:
         httpd.shutdown()
         gw.close()
+
+
+def _supervisor_command(site, action, target):
+    from sensetrust.synthetic import recapture
+    r = site.login("asha", minutiae=recapture(site.finger("asha"), seed=3, rotation=10))
+    assert r["ok"]
+    return site.send_command(r["token"], action, target)[1]
+
+
+def test_reinstated_sensor_rejoins_after_sending_many_messages(tmp_path):
+    """The new key starts a new message sequence, and the silence while waiting for the
+    technician is not mistaken for a dropout fault."""
+    from sensetrust.site import Site
+    site = Site(str(tmp_path / "s"), level=1.3)
+    site.run(100)
+    site.tamper = lambda t, s, v: v * 0.35 if s == "LT-101" else v
+    site.run(40)
+    assert site.gw.trust.is_quarantined("LT-101")
+    assert _supervisor_command(site, "device.reinstate", "LT-101")["effect"] == "allow"
+    site.run(60)                                   # old key still refused; no fault raised
+    kinds = [e["kind"] for e in site.gw.events if e["subject"] == "LT-101"]
+    assert "fault_detected" not in kinds
+    fresh = DeviceIdentity.generate("LT-101", site.clock)
+    fresh.enrol(site.gw.ca, site.gw.pending_enrolments.pop("LT-101"))
+    site.dev["LT-101"], site.tamper = fresh, None
+    site.run(200)
+    assert "re_enrolled" in [e["kind"] for e in site.gw.events]
+    assert site.log[-1]["denied"] == [] and site.log[-1]["control_source"] == "LT-101"
+    site.gw.close()
+
+
+def test_admin_revoke_and_maintenance_close_are_fingerprint_gated_commands(tmp_path):
+    from sensetrust.site import Site
+    site = Site(str(tmp_path / "s"), level=1.3)
+    site.run(5)
+    assert _supervisor_command(site, "device.revoke", "XV-101")["effect"] == "allow"
+    assert site.gw.ca.is_revoked(site.dev["XV-101"].cert)
+    site.gw.degraded["PT-101"] = "stuck_value"
+    assert _supervisor_command(site, "maintenance.close", "PT-101")["effect"] == "allow"
+    assert "PT-101" not in site.gw.degraded
+    # A token without the fingerprint claim cannot revoke anything.
+    tok = site.gw.tokens.issue("asha", "shift_supervisor", ["admin"], ["mtls"], ttl=60,
+                               bind_cert_serial=site.dev["console-01"].cert.serial_number,
+                               now=site.clock())
+    env = site.dev["console-01"].command("device.revoke", "P-101")
+    assert site.gw.command(site.dev["console-01"].cert, tok, env)["effect"] == "step_up"
+    site.gw.close()

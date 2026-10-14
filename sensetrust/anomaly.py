@@ -105,6 +105,14 @@ class FaultAttackDetector:
 
     # ── inputs ───────────────────────────────────────────────────────────────
 
+    def clear(self, sensor):
+        """Forget a sensor's alarm and recent evidence (after repair or re-enrolment)."""
+        self.alarmed.pop(sensor, None)
+        self.smooth[sensor].clear()
+        self.over[sensor] = 0
+        self.missing[sensor] = 0
+        self.out_of_range[sensor] = 0
+
     def note_channel_event(self, device, reason):
         """Security evidence from the gateway: bad signature, replay, rate abuse..."""
         self.channel_events.append((self.t, device, reason))

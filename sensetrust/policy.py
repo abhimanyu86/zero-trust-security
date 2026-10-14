@@ -25,6 +25,8 @@ ACTIONS = {
     "pump.force_off": ("actuate", False),
     "interlock.bypass": ("override", True),
     "device.reinstate": ("admin", True),
+    "device.revoke": ("admin", True),
+    "maintenance.close": ("admin", False),
 }
 
 
@@ -94,7 +96,7 @@ class PolicyEngine:
         scope, critical = ACTIONS[action]
         if scope not in claims["scope"]:
             return deny("operator %s lacks scope %r" % (claims["sub"], scope))
-        if ctx.get("target_quarantined") and action != "device.reinstate":
+        if ctx.get("target_quarantined") and action not in ("device.reinstate", "device.revoke"):
             return deny("target device is quarantined")
         if critical:
             max_age = (STEP_UP_MAX_AGE_UNDER_ATTACK_S if ctx["plant_under_attack"]

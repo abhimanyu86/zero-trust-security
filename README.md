@@ -65,19 +65,33 @@ table (`config/5g_subscribers.json`); no live 5G core runs in this PoC.
 The first run installs the dependencies into `venv` and takes a few minutes. The launcher starts the
 mutual-TLS gateway on https://127.0.0.1:8443 and opens the dashboard at **http://localhost:8501**.
 
-The **Live plant** page runs the gateway and the plant in real time. Use the buttons on the left
-to launch a stolen-key false-data attack, a rogue device, a finger photo held up to the camera, or
-a genuine hardware fault, and watch the gateway respond. **Scripted scenarios** runs the ten
-end-to-end scenarios above.
+The dashboard is a **prototype operator console** over the real gateway and the simulated plant
+(running at 6x real time):
+
+- **Overview**: plant status in one sentence, a live map of every device and its link to the
+  gateway, the tank, and the level chart.
+- **Incidents**: what the gateway saw, grouped into incidents in plain words (what happened, what
+  SenseTrust did, what to do), with working actions. Approving a re-enrolment, revoking a device or
+  closing maintenance asks for the supervisor's fingerprint and goes to the gateway as a signed
+  command, decided by the same policy as everything else.
+- **Devices and identity**: certificates, trust scores, links and 5G SIM/slice bindings;
+  commission a new device with a one-time token.
+- **Pilot: shadow mode**: a read-only OPC UA session against the (simulated) PLC and the report a
+  pilot site would get.
+- **Attack lab**: stage a stolen-key attack, a rogue device, a finger photo, someone else's finger,
+  a stolen session token, or a genuine hardware fault.
+- **Scripted scenarios**: the eleven scenarios above, plus the measured evaluation.
+
+It is a prototype: no user accounts or database yet, and one plant per browser session.
 
 ## Quickstart
 
 ```bash
 python -m venv venv && source venv/bin/activate      # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-python -m pytest tests -q                 # 76 tests: real mTLS sockets, real MQTT broker, real OPC UA
+python -m pytest tests -q                 # 86 tests: real mTLS sockets, real MQTT broker, real OPC UA
 python -m sensetrust.scenarios            # the eleven scenarios, PASS/FAIL
-streamlit run dashboard/app.py            # live demo dashboard
+streamlit run dashboard/app.py            # operator console (prototype)
 python -m sensetrust.server --data data   # gateway https://127.0.0.1:8443 (mTLS), enrolment :8444
 python -m sensetrust.evaluate             # regenerate results/ (~10 min; --quick ~1.5 min)
 ```
@@ -166,7 +180,7 @@ sensetrust/
   site.py, simulation.py, scenarios.py, evaluate.py
 config/5g_subscribers.json   sample 5G core subscriber table
 tools/hsm_enrol_demo.py      device key held in a PKCS#11 token
-dashboard/app.py  Streamlit demo
+dashboard/        operator console (Streamlit): app.py, views.py, engine.py, ui.py
 docs/architecture.md
 application/      COMET application answers
 ```
