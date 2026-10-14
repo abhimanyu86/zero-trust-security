@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SenseTrust console</title>
+<link rel="icon" href="/static/yellowsense-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand">
+      <img src="/static/yellowsense-mark.png" alt="">
+      <div><b>SenseTrust</b><small>by YellowSense</small></div>
+    </div>
+    <nav class="nav" aria-label="Pages">
+      <div class="navgroup">Operate</div>
+      <a href="#/overview" data-page="overview"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Overview</a>
+      <a href="#/incidents" data-page="incidents"><svg viewBox="0 0 24 24"><path d="M12 3l9.5 17h-19z"/><path d="M12 10v4.5M12 17.5v.5"/></svg>Incidents<span class="count" id="inc-count" hidden></span></a>
+      <a href="#/devices" data-page="devices"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 1.5v3.5M15 1.5v3.5M9 19v3.5M15 19v3.5M1.5 9h3.5M1.5 15h3.5M19 9h3.5M19 15h3.5"/></svg>Devices and identity</a>
+      <div class="navgroup">Prove</div>
+      <a href="#/mobility" data-page="mobility"><svg viewBox="0 0 24 24"><path d="M4 20c4-1 4-6 8-7s5-5 8-9"/><circle cx="20" cy="4" r="1.6"/><circle cx="4" cy="20" r="1.6"/></svg>Mobility</a>
+      <a href="#/pilot" data-page="pilot"><svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Pilot: shadow mode</a>
+      <a href="#/scenarios" data-page="scenarios"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5.5 9.5A1.6 1.6 0 0 0 5.9 21h12.2a1.6 1.6 0 0 0 1.4-2.5L14 9V3"/><path d="M7.5 15h9"/></svg>Scenarios and results</a>
+    </nav>
+    <div class="railfoot">
+      <div class="clock"><span>Plant time</span><b class="num" id="clock">0:00</b></div>
+      <div class="railbtns">
+        <button class="btn small" id="run-btn" title="Pause or resume the simulated plant">Pause</button>
+        <button class="btn small" id="reset-btn" title="Start a fresh plant">Reset plant</button>
+      </div>
+      <p class="proto">Prototype console. The plant is simulated at 6x speed; every decision is made by the real SenseTrust gateway.</p>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div><h1 id="title">Overview</h1><div class="sub" id="subtitle"></div></div>
+      <div class="grow"></div>
+      <span class="pill" id="pill"><i></i><span id="pill-text">Connecting</span></span>
+      <button class="btn primary" id="sim-btn"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Simulate an event</button>
+    </header>
+    <section class="view" id="view"></section>
+  </main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Simulate an event">
+  <header><h2>Simulate an event</h2><button class="btn small" id="drawer-close">Close</button></header>
+  <p class="intro">These play attacker or plant on the live system. Keep this open and watch the plant map respond.</p>
+  <div class="scroll" id="drawer-body"></div>
+</aside>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="card" id="modal-card"></div>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 """
-The live plant behind the operator console.
+The live plant behind the operator console (console/server.py).
 
-One `LivePlant` per browser session: the real gateway in front of the simulated water
+One `LivePlant` for the demo: the real gateway in front of the simulated water
 plant, advanced in step with the wall clock (SPEED plant seconds per real second), plus
 the operator-side state the console needs: who is logged in, incident status, injected
 attacks and faults, and counts of every gateway decision.
@@ -63,6 +63,8 @@ class LivePlant:
         self.incident_status = {}            # incident id -> "acknowledged" | "resolved"
         self.subscribers = _load_5g()
         self.counts = Counter()              # gateway decisions: (kind, effect)
+        self.by_device = Counter()           # (device, effect): drives the message animation
+        self.last_fingerprint = None         # what the reader saw on the last step-up
         self.roles = dict(DEVICES)
         self.last_action = None              # (ok, message) for the console to show
         self._wrap_gateway()
@@ -92,6 +94,11 @@ class LivePlant:
             def counted(*a, _orig=original, _kind=kind, **k):
                 d = _orig(*a, **k)
                 self.counts[(_kind, d["effect"])] += 1
+                env = a[1] if len(a) > 1 and isinstance(a[1], dict) else (a[2] if len(a) > 2 else {})
+                who = (env.get("body") or {}).get("device_id", "unknown")
+                if d["effect"] != "allow" and "not issued by plant CA" in " ".join(d["reasons"]):
+                    who = "rogue"
+                self.by_device[(who, "allow" if d["effect"] == "allow" else "deny")] += 1
                 return d
             setattr(self.gw, kind, counted)
 
@@ -161,6 +168,8 @@ class LivePlant:
     def command(self, action, target, **params):
         """Fingerprint step-up, then a signed command from console-01. Returns (ok, message)."""
         r = self._fingerprint()
+        self.last_fingerprint = {"ok": r["ok"], "score": round(r.get("score") or 0, 2),
+                                 "operator": SUPERVISOR, "console": CONSOLE}
         if not r["ok"]:
             self.last_action = (False, "Fingerprint check failed: %s" % "; ".join(r["reasons"]))
             return self.last_action
@@ -253,7 +262,7 @@ class LivePlant:
 
     def incidents(self):
         """Gateway events grouped into incidents an operator acts on, newest first."""
-        out = {}
+        out, done = {}, []
         for e in self.gw.events:
             kind, subj = e["kind"], e["subject"]
             t = int(e["ts"] - self.site.t0)
@@ -276,10 +285,13 @@ class LivePlant:
             if inc is None or self.incident_status.get(inc["id"]) == "resolved":
                 iid = "%s:%s:%d" % (key[0], key[1], t)
                 inc = out[key] = {"id": iid, "type": key[0], "subject": subj, "first": t, "last": t,
-                                  "count": 0, "event": e}
+                                  "count": 0, "event": e, "events": []}
+                done.append(inc)
             inc["last"] = t
             inc["count"] += 1
-        incs = list(out.values())
+            if len(inc["events"]) < 6:
+                inc["events"].append({"t": t, "detail": e["detail"]})
+        incs = done
         for inc in incs:
             inc["status"] = self.incident_status.get(inc["id"], "open")
             s = inc["subject"]
@@ -289,3 +301,100 @@ class LivePlant:
             elif inc["type"] == "fault":
                 inc["device_state"] = "maintenance" if s in self.gw.degraded else "repaired"
         return sorted(incs, key=lambda i: i["first"], reverse=True)
+
+
+# ── words for people ─────────────────────────────────────────────────────────
+
+SEVERITY = {"attack": "critical", "rogue": "critical", "spoof": "critical", "token": "critical",
+            "fault": "maintenance", "inspect": "warning", "login": "warning"}
+
+
+def person(op):
+    return "Supervisor %s" % op.capitalize() if op == SUPERVISOR else op.capitalize()
+
+
+def _times(n):
+    return "1 attempt" if n == 1 else "%d attempts" % n
+
+
+def describe(inc, plant):
+    """(title, what happened, what SenseTrust did, what to do) in plain words."""
+    s, n, typ = inc["subject"], inc["count"], inc["type"]
+    kind = (inc["event"].get("diagnosis") or {}).get("kind", "").replace("_", " ")
+    if typ == "attack":
+        refused = sum(1 for e in plant.gw.events if e["subject"] == s
+                      and e["kind"] in ("telemetry_denied", "m2m_denied") and "revoked" in e["detail"])
+        return ("%s is sending false readings" % s,
+                "Its values contradict what pressure and flow say the tank is doing, while its own "
+                "signal looks healthy. That is someone using its key to lie (%s)." % kind,
+                "Revoked its certificate and cut it off within the same second. Pump control "
+                "switched to a physics-based level. %d further messages refused." % refused,
+                "Inspect the device on site. Once it is clean, approve re-enrolment with your "
+                "fingerprint; the technician then enrols it with a new key.")
+    if typ == "fault":
+        return ("%s looks broken, not attacked" % s,
+                "Its signal shows a hardware failure pattern (%s) and nothing suspicious on its "
+                "network channel." % kind,
+                "Raised a maintenance ticket and stopped using its value in control. Its identity "
+                "and certificate are untouched.",
+                "Send a technician. After the repair, close maintenance so its value is used again.")
+    if typ == "inspect":
+        return ("%s is drifting slowly" % s,
+                "A slow, smooth divergence from physics: calibration drift or a patient attacker. "
+                "The data alone cannot tell which.",
+                "Raised an inspection ticket and lowered its trust score.",
+                "Check its calibration on site.")
+    if typ == "rogue":
+        return ("Unknown device posing as %s" % s,
+                "A device presented a certificate this plant's CA never issued (%s)." % _times(n),
+                "Refused every message before it reached the controller.",
+                "Find it: check the switch port or 5G SIM it connected from.")
+    if typ == "spoof":
+        return ("Finger photo used on %s's account" % person(s),
+                "Someone held a picture of the supervisor's finger up to the reader. Liveness "
+                "detection saw a screen's pixel pattern.",
+                "Refused the login. Repeated attempts lock the account.",
+                "Check who was at the console at that time.")
+    if typ == "login":
+        return ("Wrong finger on %s's account" % person(s),
+                "A fingerprint that does not match the enrolled supervisor (%s)." % _times(n),
+                "Refused the login.",
+                "Confirm with the supervisor whether this was them.")
+    if typ == "token":
+        return ("%s's session used from another console" % person(s),
+                "A valid session token, copied from console-01, was replayed from console-02.",
+                "Refused: a token only works from the console certificate it was issued to.",
+                "Treat console-01 as compromised: check it for malware and end the operator's "
+                "sessions.")
+    return (typ, "", "", "")
+
+
+def status(plant):
+    gw = plant.gw
+    revoked = sorted(s for s in gw.trust.quarantined() if not s.startswith("operator:"))
+    if revoked:
+        return ("alarm", "Attack contained",
+                "%s cut off and %s. The plant runs on the instruments it can still trust."
+                % (", ".join(revoked), "its certificate revoked" if len(revoked) == 1
+                   else "their certificates revoked"))
+    if gw.degraded:
+        return ("fault", "Maintenance needed",
+                "%s looks broken, not attacked. Its value is set aside until it is repaired."
+                % ", ".join(sorted(gw.degraded)))
+    if gw.pending_enrolments:
+        return ("fault", "Waiting for a technician",
+                "Re-enrolment approved for %s. It must enrol a new key on site."
+                % ", ".join(sorted(gw.pending_enrolments)))
+    return ("ok", "Normal operation",
+            "Every device is who it says it is, and every reading agrees with plant physics.")
+
+
+def device_state(plant, ident):
+    gw = plant.gw
+    if ident in gw.pending_enrolments:
+        return "pending"
+    if gw.trust.is_quarantined(ident):
+        return "revoked"
+    if ident in gw.degraded:
+        return "fault"
+    return "ok"

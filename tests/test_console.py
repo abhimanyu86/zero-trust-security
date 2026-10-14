@@ -1,66 +1,71 @@
-"""The operator console: every page renders, and its actions go through the gateway."""
+"""The operator console: the web app is served and its API drives the real gateway."""
 
-import os
+import time
 
 import pytest
 
-pytest.importorskip("streamlit")
-from streamlit.testing.v1 import AppTest      # noqa: E402
+pytest.importorskip("fastapi")
+from fastapi.testclient import TestClient      # noqa: E402
 
-APP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                   "dashboard", "app.py")
-PAGES = ["overview", "incidents", "devices", "lab", "scenarios", "pilot", "mobility"]
+from console import server                      # noqa: E402
 
 
-def _render(page, dashboard_dir):
-    import os
-    import sys
-    sys.path.insert(0, dashboard_dir)
-    sys.path.insert(0, os.path.dirname(dashboard_dir))
-    import streamlit as st
-    import views
-    from engine import LivePlant
-    if "engine" not in st.session_state:
-        st.session_state.engine = LivePlant()
-        st.session_state.engine.inject_false_data()
-        for _ in range(60):
-            st.session_state.engine.site.step()
-    views.PAGES.setdefault("incidents", st.Page(views.incidents, title="Incidents",
-                                                url_path="incidents"))
-    {"overview": views.overview, "incidents": views.incidents, "devices": views.devices,
-     "lab": views.lab, "scenarios": views.scenarios_page, "pilot": views.pilot,
-     "mobility": views.mobility_page}[page]()
+@pytest.fixture
+def client():
+    with TestClient(server.app) as c:
+        c.post("/api/plant", json={"reset": True})
+        yield c
 
 
-@pytest.mark.parametrize("page", PAGES)
-def test_page_renders_without_errors(page):
-    at = AppTest.from_function(_render, args=(page, os.path.dirname(APP)), default_timeout=120)
-    at.run()
-    assert not at.exception, [e.value for e in at.exception]
+def _wait(c, cond, timeout=30):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        s = c.get("/api/state").json()
+        if cond(s):
+            return s
+        time.sleep(0.5)
+    raise AssertionError("condition not reached")
 
 
-def test_full_app_starts():
-    at = AppTest.from_file(APP, default_timeout=120)
-    at.run()
-    assert not at.exception, [e.value for e in at.exception]
+def test_page_and_assets_are_served(client):
+    page = client.get("/")
+    assert page.status_code == 200 and "SenseTrust" in page.text
+    for asset in ("app.js", "app.css", "yellowsense-mark.png"):
+        assert client.get("/static/" + asset).status_code == 200
 
 
-def test_attack_then_reinstate_flow():
-    import sys
-    sys.path.insert(0, os.path.dirname(APP))
-    from engine import LivePlant
-    e = LivePlant()
-    for _ in range(100):
-        e.site.step()
-    e.inject_false_data()
-    for _ in range(40):
-        e.site.step()
-    attack = [i for i in e.incidents() if i["type"] == "attack"]
-    assert attack and attack[0]["device_state"] == "revoked"
-    assert e.reinstate("LT-101")[0]
-    assert e.technician_reenrol("LT-101")[0]
-    for _ in range(100):
-        e.site.step()
-    rows = {r["Device"]: r["Status"] for r in e.device_rows()}
-    assert rows["LT-101"] == "Trusted" and e.site.plant.overflow_seconds == 0
-    e.gw.close()
+def test_live_state_runs_and_describes_the_plant(client):
+    s = _wait(client, lambda s: s["t"] > 3)
+    assert s["status"]["level"] == "ok" and s["metrics"]["refused"] == 0
+    assert {d["id"] for d in s["devices"]} >= {"LT-101", "PT-101", "FT-101", "console-01"}
+    assert s["links"]["LT-101"]["allow"] > 0 and len(s["series"]) > 3
+
+
+def test_attack_then_fingerprint_approved_recovery(client):
+    client.post("/api/simulate/false_data", json={"target": "LT-101"})
+    s = _wait(client, lambda s: any(i["type"] == "attack" for i in s["incidents"]))
+    inc = next(i for i in s["incidents"] if i["type"] == "attack")
+    assert inc["severity"] == "critical" and "false readings" in inc["title"]
+    assert s["status"]["level"] == "alarm"
+    r = client.post("/api/action", json={"action": "reinstate", "target": "LT-101"}).json()
+    assert r["ok"] and r["fingerprint"]["ok"]
+    r = client.post("/api/action", json={"action": "technician_reenrol", "target": "LT-101"}).json()
+    assert r["ok"]
+    s = _wait(client, lambda s: next(d for d in s["devices"] if d["id"] == "LT-101")["status"] == "Trusted")
+    client.post("/api/action", json={"action": "resolve", "target": inc["id"]})
+    assert client.get("/api/state").json()["metrics"]["open"] == 0
+
+
+def test_rogue_device_and_bad_input_are_refused(client):
+    client.post("/api/simulate/rogue")
+    s = client.get("/api/state").json()
+    assert s["links"]["rogue"]["deny"] == 1
+    assert any(i["type"] == "rogue" for i in s["incidents"])
+    assert client.post("/api/simulate/nonsense").status_code == 404
+    assert client.post("/api/action", json={"action": "commission", "target": ""}).status_code == 400
+
+
+def test_scenarios_are_listed_and_run(client):
+    r = client.get("/api/scenarios").json()
+    assert len(r["scenarios"]) >= 12
+    assert client.post("/api/scenarios/S1").json()["passed"] is True
