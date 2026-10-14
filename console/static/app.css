@@ -316,3 +316,10 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tip p { margin: 0 0 14px; font-size: 14px; color: var(--muted); line-height: 1.5; }
 .tipbtns { display: flex; gap: 8px; align-items: center; }
 @media (max-width: 760px) { .wq { grid-template-columns: 1fr; } .rings { display: none; } .tip { width: calc(100vw - 32px); } }
+
+/* two-tone wordmarks, as in the YellowSense logo */
+.wm span { color: var(--brand-deep); }
+.ys { font-weight: 700; color: var(--ink); }
+.ys i { font-style: normal; color: var(--brand-deep); }
+.ys.big { font: 800 15px var(--head); letter-spacing: .06em; }
+.ys.big em { font: 600 11px var(--body); letter-spacing: .28em; color: var(--muted); margin-left: 6px; font-style: normal; }
