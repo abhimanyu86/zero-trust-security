@@ -36,6 +36,11 @@ class ReplayGuard:
             self._nonces[nonce] = now
             return True, "ok"
 
+    def forget(self, sender):
+        """Restart the sequence for a sender that has re-enrolled with a new key."""
+        with self._lock:
+            self._seq.pop(sender, None)
+
 
 class RateLimiter:
     """Token bucket per sender."""

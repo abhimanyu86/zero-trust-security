@@ -25,6 +25,8 @@ ACTIONS = {
     "pump.force_off": ("actuate", False),
     "interlock.bypass": ("override", True),
     "device.reinstate": ("admin", True),
+    "device.revoke": ("admin", True),
+    "maintenance.close": ("admin", False),
 }
 
 
@@ -69,6 +71,12 @@ class PolicyEngine:
             return deny("device quarantined")
         return Decision("allow", ["trust %.2f" % ctx["trust"]])
 
+    def decide_mobility(self, ctx):
+        """A moving device's radio report: same checks as telemetry, for vehicles and sensors."""
+        if ctx["role"] in ("vehicle", "sensor"):
+            ctx = {**ctx, "role": "sensor"}
+        return self.decide_telemetry(ctx)
+
     def decide_command(self, ctx):
         """ctx: cert_ok, cert_reason, role, token_ok, token_reason, claims,
         cert_serial, action, sig_ok, replay_ok, replay_reason, now, plant_under_attack,
@@ -94,7 +102,7 @@ class PolicyEngine:
         scope, critical = ACTIONS[action]
         if scope not in claims["scope"]:
             return deny("operator %s lacks scope %r" % (claims["sub"], scope))
-        if ctx.get("target_quarantined") and action != "device.reinstate":
+        if ctx.get("target_quarantined") and action not in ("device.reinstate", "device.revoke"):
             return deny("target device is quarantined")
         if critical:
             max_age = (STEP_UP_MAX_AGE_UNDER_ATTACK_S if ctx["plant_under_attack"]

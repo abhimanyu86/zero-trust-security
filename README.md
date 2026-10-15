@@ -54,6 +54,7 @@ engine is an open work item (see below).
 | S9 | Over MQTT (real Mosquitto broker): stolen LT-101 key posts as PT-101; rogue and certificate-less clients connect; LT-101 revoked | Secure APIs, encryption, M2M | broker refuses the publish (MQTT code 135) before the gateway; handshakes refused; revoked device's next message denied and reconnect refused |
 | S10 | Private 5G: stolen SIM without the key; key on another SIM; command from a sensor's slice; closed maintenance slice | Device identity, secure access | all denied; a key seen on the wrong SIM is treated as stolen and revoked |
 | S11 | Pilot-site shadow mode: SenseTrust may only read the PLC over OPC UA; the LT-101 transmitter behind the PLC is compromised; rogue and certificate-less clients connect; SenseTrust tries to write | Anomaly detection, secure access, encryption | attack flagged from physics in 3 s, incident ticket, nothing revoked; rogue and certificate-less clients refused; write refused |
+| S12 | Private 5G mobility: service vehicle TRK-07 drives the site (including an unplanned exit) while MOBI-GUARD prepares its handovers; an attacker with its copied key reports as TRK-07 from elsewhere | Device identity, M2M trust, AI network intelligence (PS-6) | real route change: no alarm; copy caught on its first report, identity revoked on the second; handovers held while the identity is under suspicion |
 
 S9 needs Mosquitto installed (it shows SKIP otherwise; see below). S11 needs `asyncua`
 (in `requirements.txt`). S10 uses a sample subscriber
@@ -63,26 +64,40 @@ table (`config/5g_subscribers.json`); no live 5G core runs in this PoC.
 
 **Windows:** double-click `run_demo.bat`. **macOS/Linux:** `./run_demo.sh`.
 The first run installs the dependencies into `venv` and takes a few minutes. The launcher starts the
-mutual-TLS gateway on https://127.0.0.1:8443 and opens the dashboard at **http://localhost:8501**.
+mutual-TLS gateway on https://127.0.0.1:8443 and opens the operator console at **http://localhost:8501**.
 
-The **Live plant** page runs the gateway and the plant in real time. Use the buttons on the left
-to launch a stolen-key false-data attack, a rogue device, a finger photo held up to the camera, or
-a genuine hardware fault, and watch the gateway respond. **Scripted scenarios** runs the ten
-end-to-end scenarios above.
+The console is a **prototype operator console**: a web app (`console/`, FastAPI behind a plain
+HTML/CSS/JavaScript page, no build step) over the real gateway and the simulated plant running at 6x
+real time.
+
+- **Overview**: a live map of every device and its link to the gateway, with each message drawn as
+  it travels (refused ones stop red at the gateway), pump control, the tank, and the level chart.
+- **Incidents**: list and detail. Each incident says what happened, what SenseTrust did and what to
+  do, with working actions. Approving a re-enrolment, revoking a device or closing maintenance asks
+  for the supervisor's fingerprint and goes to the gateway as a signed command.
+- **Devices and identity**: certificates, trust, links and 5G bindings; commission a device with a
+  one-time token.
+- **Mobility**: MOBI-GUARD and SenseTrust together on a vehicle drive (scenario S12).
+- **Pilot: shadow mode**: a read-only OPC UA session and the report a pilot site would get.
+- **Scenarios and results**: run any of the twelve scenarios; the measured evaluation.
+- **Simulate an event** (top right, any page): stolen key, rogue device, finger photo, someone
+  else's finger, stolen session token, or a genuine hardware fault.
+
+It is a prototype: no user accounts or database yet, and one shared plant per console server.
 
 ## Quickstart
 
 ```bash
 python -m venv venv && source venv/bin/activate      # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-python -m pytest tests -q                 # 76 tests: real mTLS sockets, real MQTT broker, real OPC UA
-python -m sensetrust.scenarios            # the eleven scenarios, PASS/FAIL
-streamlit run dashboard/app.py            # live demo dashboard
+python -m pytest tests -q                 # 95 tests: real mTLS sockets, real MQTT broker, real OPC UA
+python -m sensetrust.scenarios            # the twelve scenarios, PASS/FAIL
+python -m console.server                  # operator console (prototype) on http://localhost:8501
 python -m sensetrust.server --data data   # gateway https://127.0.0.1:8443 (mTLS), enrolment :8444
 python -m sensetrust.evaluate             # regenerate results/ (~10 min; --quick ~1.5 min)
 ```
 
-Or run `docker compose up` for the gateway (:8443, enrolment :8444) and the dashboard (:8501),
+Or run `docker compose up` for the gateway (:8443, enrolment :8444) and the console (:8501),
 and `docker compose run --rm scenarios` for all eleven scenarios with Mosquitto included.
 
 ### MQTT (scenario S9)
@@ -102,6 +117,32 @@ on drives C, D and E. If it is somewhere else, set `MOSQUITTO` to its folder, e.
 `export MOSQUITTO="/d/Tools/mosquitto"`; in PowerShell: `$env:MOSQUITTO="D:\Tools\mosquitto"`.
 
 Without Mosquitto, S9 and `tests/test_mqtt.py` are skipped and everything else runs.
+
+### MOBI-GUARD: mobility intelligence and trust (scenario S12)
+
+MOBI-GUARD is YellowSense's PS-6 engine for moving 5G devices: it predicts each device's next
+cell 4 s ahead with calibrated confidence, estimates whether the current cell is weakening, and
+decides whether to prepare a handover. It lives unchanged in `vendor/mobiguard/` (see its
+`VENDORED.md`); `sensetrust/mobility.py` connects it to the gateway in both directions:
+
+- **Moving devices are checked like every other device.** A vehicle's radio report
+  (`Gateway.mobility_report`) is signed and goes through identity, signature, replay and rate
+  checks first.
+- **One identity, one signal track.** A real device moves through space, so its neighbour
+  signals change smoothly from report to report. A copy of its key reporting from elsewhere
+  starts a second track. Two tracks reporting at the same time, or a jump to a cell MOBI-GUARD
+  had ruled out together with a break in the signals, is "impossible movement": the identity
+  loses trust, and a repeat revokes it.
+- **Trust gates handovers.** MOBI-GUARD's advice to prepare a handover is followed only for
+  identities SenseTrust trusts; otherwise the network holds.
+
+Measured on MOBI-GUARD's held-out test drives (thresholds set on its training drives): 0
+identity alarms in 4,465 genuine reports over 24 drives with 62 real handovers, and every one of
+24 copied identities caught (median 3 copy reports). Fresh drives from its simulator (42 drives,
+8,266 reports): 0 alarms. Honest limits: these are simulated drives; a copy that sits right next
+to the real device sees the same signals and is not separated by this check (identity and
+replay checks still apply); MOBI-GUARD's forecast catches a copy on its very first report in 3
+of 24 cases, the signal tracks catch the rest within a few reports.
 
 ### OPC UA shadow mode (scenario S11)
 
@@ -152,6 +193,7 @@ sensetrust/
   devices.py      device side: generates its own key, enrols, renews, signs every message
   mqtt.py         Mosquitto broker config (mTLS, ACL, CRL), device client, gateway bridge
   opcua.py        OPC UA shadow mode: secured read-only PLC server (simulated) + SenseTrust monitor
+  mobility.py     MOBI-GUARD bridge: one identity = one signal track; trust gates handovers
   fiveg.py        private 5G binding: certificate + SIM address + slice must agree
   crypto.py       message signing, Ed25519 access tokens (sender-constrained), AES-256-GCM sealing
   gateway.py      policy enforcement point: identity -> integrity -> freshness -> behaviour -> policy
@@ -165,8 +207,9 @@ sensetrust/
   server.py       HTTPS + mutual TLS front end; enrolment endpoint
   site.py, simulation.py, scenarios.py, evaluate.py
 config/5g_subscribers.json   sample 5G core subscriber table
+vendor/mobiguard/            MOBI-GUARD (PS-6), vendored unchanged
 tools/hsm_enrol_demo.py      device key held in a PKCS#11 token
-dashboard/app.py  Streamlit demo
+console/          operator console: server.py (FastAPI), engine.py (live plant), runs.py, static/ (the web page)
 docs/architecture.md
 application/      COMET application answers
 ```

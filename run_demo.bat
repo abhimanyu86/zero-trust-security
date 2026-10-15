@@ -2,7 +2,7 @@
 setlocal EnableExtensions EnableDelayedExpansion
 rem SenseTrust live demo for Windows. Double-click this file.
 rem It finds (or installs) Python, installs the dependencies once, starts the
-rem mutual-TLS gateway and opens the dashboard in your browser.
+rem mutual-TLS gateway and opens the operator console in your browser.
 cd /d "%~dp0"
 title SenseTrust live demo
 
@@ -54,7 +54,7 @@ if not exist venv\Scripts\python.exe (
   if "%PY:~0,3%"=="py " (%PY% -m venv venv) else ("%PY%" -m venv venv)
   if not exist venv\Scripts\python.exe goto :fail
 )
-if not exist venv\.deps-installed-v3 (
+if not exist venv\.deps-installed-v5 (
   echo [2/4] Installing dependencies - first run only, takes a few minutes...
   venv\Scripts\python -m pip install --disable-pip-version-check -q --upgrade pip
   venv\Scripts\python -m pip install --disable-pip-version-check --prefer-binary -r requirements.txt
@@ -65,7 +65,7 @@ if not exist venv\.deps-installed-v3 (
     rmdir /s /q venv
     goto :fail
   )
-  echo ok> venv\.deps-installed-v3
+  echo ok> venv\.deps-installed-v5
 ) else (
   echo [2/4] Dependencies already installed.
 )
@@ -84,16 +84,16 @@ netstat -ano | findstr /r /c:":8443 .*LISTENING" >nul && set "GW_PORT=8444"
 echo [3/4] Starting the mutual-TLS gateway on https://127.0.0.1:!GW_PORT! (second window)...
 start "SenseTrust gateway" venv\Scripts\python -m sensetrust.server --data data --port !GW_PORT!
 
-echo [4/4] Starting the dashboard on http://localhost:!UI_PORT! ...
+echo [4/4] Starting the operator console on http://localhost:!UI_PORT! ...
 echo.
 echo  Your browser opens in a few seconds. If it does not, open
 echo      http://localhost:!UI_PORT!
 echo  Keep this window open while you use the demo. Close it to stop.
 echo.
-start "" cmd /c "timeout /t 10 /nobreak >nul & start http://localhost:!UI_PORT!"
-venv\Scripts\python -m streamlit run dashboard\app.py --server.headless true --server.port !UI_PORT! --browser.gatherUsageStats false --client.toolbarMode minimal
+start "" cmd /c "timeout /t 6 /nobreak >nul & start http://localhost:!UI_PORT!"
+venv\Scripts\python -m console.server --port !UI_PORT!
 echo.
-echo  The dashboard stopped.
+echo  The console stopped.
 
 :fail
 echo.

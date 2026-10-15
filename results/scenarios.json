@@ -381,5 +381,37 @@
       "note": "shadow mode alerts only: the PLC kept trusting LT-101; enforcement mode (S2) is what prevents the overflow"
     },
     "passed": true
+  },
+  {
+    "id": "S12",
+    "name": "5G mobility: a copied vehicle identity reports from elsewhere",
+    "ps13": "Device identity + AI network intelligence (MOBI-GUARD, PS-6)",
+    "observed": {
+      "route": "highway_exit (unplanned exit ramp), cells Cell_A > Cell_B > Cell_C",
+      "genuine_reports_before_copy": 70,
+      "alarms_before_copy": 0,
+      "mobiguard_advice": {
+        "MONITOR_RECHECK": 67,
+        "PROACTIVE_CANDIDATE": 4,
+        "HOLD": 5
+      },
+      "copy_reports_until_alarm": 1,
+      "TRK07_revoked": true,
+      "events": [
+        [
+          "impossible_movement",
+          "one identity in two places at once: a cell MOBI-GUARD ruled out, reached with a break in the signals (report from Cell_A)"
+        ],
+        [
+          "impossible_movement",
+          "one identity in two places at once: two signal tracks reporting at the same time (report from Cell_A)"
+        ],
+        [
+          "quarantine",
+          "identity quarantined and certificate revoked (impossible_movement: cloned key or SIM)"
+        ]
+      ]
+    },
+    "passed": true
   }
 ]

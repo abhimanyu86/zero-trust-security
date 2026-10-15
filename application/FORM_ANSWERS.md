@@ -101,7 +101,7 @@ identifies which sensor disagrees, and then reads that sensor's own signal:
 - Gateway decision time: under 1 ms per request; biometric login under 25 ms.
 
 **Tech stack:** Python, `cryptography`, scikit-learn, Eclipse Mosquitto (MQTT over mutual TLS),
-OPC UA (read-only "shadow mode" for pilot sites), Streamlit dashboard, Docker, 76 automated tests. Devices generate their own keys and enrol with
+OPC UA (read-only "shadow mode" for pilot sites), a prototype operator console, Docker, 95 automated tests, and MOBI-GUARD mobility intelligence (XGBoost) for moving devices. Devices generate their own keys and enrol with
 one-time tokens (the CA holds no device keys). For private 5G, the gateway checks that a
 device's certificate, its SIM's address and its network slice all match; this is tested
 against sample 5G core data, with end-to-end testing planned on the COMET testbed.

@@ -462,6 +462,66 @@ def s11_opcua_shadow(base):
     return {"observed": obs, "passed": passed}
 
 
+def s12_cloned_mobile_identity(base):
+    """
+    A plant service vehicle (TRK-07) drives the site on private 5G, including an
+    unplanned exit off its usual route. MOBI-GUARD predicts its next cell and prepares
+    handovers; SenseTrust checks every report. Then an attacker who copied the vehicle's
+    key starts reporting as TRK-07 from another part of the site. The real route change
+    must not raise an alarm; the copy must be caught and the identity revoked.
+    """
+    try:
+        from . import mobility
+        if not mobility.available():
+            raise ImportError
+    except ImportError:
+        return {"observed": {"skipped": "MOBI-GUARD dependencies missing (pip install -r requirements.txt)"},
+                "passed": None}
+    from .gateway import Gateway
+    clock = {"t": 1_760_000_000.0}
+    gw = Gateway(os.path.join(base, "s12"), clock=lambda: clock["t"])
+    truck = DeviceIdentity.commission(gw.ca, "TRK-07", "vehicle", lambda: clock["t"])
+    drive = mobility.trajectory("highway_exit", seed=7, ue_id="TRK-07")
+    elsewhere = mobility.trajectory("urban_grid", seed=11, ue_id="TRK-07")
+    clone_from = 70
+    before, verdicts, advice, first_alarm, clone_reports = [], [], {}, None, 0
+    try:
+        for k, report in enumerate(drive):
+            clock["t"] = 1_760_000_000.0 + report["timestamp"]
+            d = gw.mobility_report(truck.cert, truck.envelope(radio=report))
+            m = d.get("mobility")
+            if m:
+                verdicts.append(("genuine", m["verdict"]))
+                advice[m["advice"]["action"]] = advice.get(m["advice"]["action"], 0) + 1
+            if k >= clone_from and k % 5 == 0 and k - clone_from < len(elsewhere):
+                clone_reports += 1
+                fake = dict(elsewhere[k], timestamp=report["timestamp"] + 0.5)
+                d = gw.mobility_report(truck.cert, truck.envelope(radio=fake))   # stolen key
+                if d.get("mobility"):
+                    verdicts.append(("copy", d["mobility"]["verdict"]))
+                if first_alarm is None and any(e["kind"] == "impossible_movement" for e in gw.events):
+                    first_alarm = clone_reports
+            if k < clone_from:
+                before.append(report["current_cell"])
+        alarms_before_clone = sum(1 for _, v in verdicts[:clone_from] if v == "impossible")
+        obs = {
+            "route": "highway_exit (unplanned exit ramp), cells %s" % " > ".join(
+                c for i, c in enumerate(before) if i == 0 or c != before[i - 1]),
+            "genuine_reports_before_copy": clone_from,
+            "alarms_before_copy": alarms_before_clone,
+            "mobiguard_advice": advice,
+            "copy_reports_until_alarm": first_alarm,
+            "TRK07_revoked": gw.trust.is_quarantined("TRK-07"),
+            "events": [(e["kind"], e["detail"]) for e in gw.events
+                       if e["kind"] in ("impossible_movement", "quarantine")][:3],
+        }
+    finally:
+        gw.close()
+    passed = (obs["alarms_before_copy"] == 0 and obs["copy_reports_until_alarm"] is not None
+              and obs["TRK07_revoked"])
+    return {"observed": obs, "passed": passed}
+
+
 SCENARIOS = [
     ("S1", "Rogue / cloned device", "Device identity, mTLS", s1_rogue_device),
     ("S2", "Stolen key + false data injection", "Anomaly detection, M2M trust, revocation", s2_stolen_key_false_data),
@@ -475,6 +535,8 @@ SCENARIOS = [
     ("S10", "5G: key and SIM must belong together", "Device identity on private 5G, slices", s10_5g_binding),
     ("S11", "OPC UA shadow mode: compromised sensor behind the PLC",
      "Anomaly detection on read-only plant data, secure OPC UA", s11_opcua_shadow),
+    ("S12", "5G mobility: a copied vehicle identity reports from elsewhere",
+     "Device identity + AI network intelligence (MOBI-GUARD, PS-6)", s12_cloned_mobile_identity),
 ]
 
 def load_calibration(path="results/calibration.pkl"):

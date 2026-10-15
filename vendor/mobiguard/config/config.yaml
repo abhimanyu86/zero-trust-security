@@ -1,0 +1,139 @@
+seed: 42
+
+simulator:
+  dt_seconds: 1.0
+  prediction_horizon_steps: 4
+  noise_std_db: 1.5
+  temporal_correlation_alpha: 0.75
+  hysteresis_db: 3.0
+  thermal_noise_dbm: -104.0
+  path_loss_exponent: 3.4
+  reference_loss_d0: 38.5  # at 1 meter, ~3.5 GHz
+  tx_power_dbm: 43.0
+
+cells:
+  Cell_A:
+    id: "Cell_A"
+    x: 0.0
+    y: 0.0
+    tx_power_dbm: 43.0
+    frequency_ghz: 3.5
+    label: "Sector A (West Hub)"
+    color: "#3B82F6"
+  Cell_B:
+    id: "Cell_B"
+    x: 2000.0
+    y: 0.0
+    tx_power_dbm: 43.0
+    frequency_ghz: 3.5
+    label: "Sector B (East Corridor)"
+    color: "#10B981"
+  Cell_C:
+    id: "Cell_C"
+    x: 1600.0
+    y: 1100.0
+    tx_power_dbm: 43.0
+    frequency_ghz: 3.5
+    label: "Sector C (North-East Branch)"
+    color: "#F59E0B"
+  Cell_D:
+    id: "Cell_D"
+    x: 0.0
+    y: 1800.0
+    tx_power_dbm: 43.0
+    frequency_ghz: 3.5
+    label: "Sector D (North Urban)"
+    color: "#8B5CF6"
+  Cell_E:
+    id: "Cell_E"
+    x: 3600.0
+    y: 0.0
+    tx_power_dbm: 43.0
+    frequency_ghz: 3.5
+    label: "Sector E (Far East Expressway)"
+    color: "#EC4899"
+  Cell_F:
+    id: "Cell_F"
+    x: 2800.0
+    y: 1600.0
+    tx_power_dbm: 43.0
+    frequency_ghz: 3.5
+    label: "Sector F (Outer Orbital)"
+    color: "#06B6D4"
+
+scenarios:
+  highway_straight:
+    name: "Highway Straight Corridor"
+    description: "High-speed linear trajectory along the primary expressway (A -> B -> E)."
+    speed_range_mps: [26.0, 32.0]
+    num_trajectories: 25
+  highway_exit:
+    name: "Highway Route Deviation (Primary Demo)"
+    description: "Starts towards Cell B, then suddenly branches off at the exit ramp towards Cell C."
+    speed_range_mps: [24.0, 30.0]
+    num_trajectories: 25
+  urban_grid:
+    name: "Urban Grid Multi-turn"
+    description: "Lower speed city grid mobility with orthogonal 90-degree turns and fast shadowing."
+    speed_range_mps: [8.0, 14.0]
+    num_trajectories: 25
+  rail_corridor:
+    name: "High-Speed Rail Corridor"
+    description: "Ultra high-speed straight transit with severe Doppler and rapid handovers."
+    speed_range_mps: [40.0, 50.0]
+    num_trajectories: 20
+  station_approach:
+    name: "Station Deceleration"
+    description: "High-speed arrival followed by rapid deceleration to 0 m/s at transit depot."
+    speed_range_mps: [0.0, 30.0]
+    num_trajectories: 20
+  noisy_measurement:
+    name: "Severe Shadowing & Noise"
+    description: "Urban canyon multipath fading with high noise variance testing guardrails."
+    speed_range_mps: [12.0, 20.0]
+    noise_multiplier: 3.0
+    num_trajectories: 20
+  sparse_telemetry:
+    name: "Sparse / Jittered Telemetry"
+    description: "Sub-sampled reporting intervals testing data quality degradation gates."
+    speed_range_mps: [15.0, 25.0]
+    sample_drop_rate: 0.35
+    num_trajectories: 20
+
+features:
+  rolling_window_size: 3
+  weakening_rsrp_threshold_dbm: -95.0
+  weakening_delta_drop_db: 4.0
+
+model:
+  version: "v1.0.0-xgb-calibrated"
+  next_cell_params:
+    max_depth: 4
+    n_estimators: 120
+    learning_rate: 0.08
+    subsample: 0.85
+    colsample_bytree: 0.85
+    random_state: 42
+  weakness_params:
+    max_depth: 3
+    n_estimators: 100
+    learning_rate: 0.08
+    subsample: 0.85
+    random_state: 42
+  calibration_method: "sigmoid"
+
+policy:
+  confidence_high_threshold: 0.80
+  confidence_medium_threshold: 0.60
+  weakening_risk_threshold: 0.50
+  entropy_high_uncertainty_threshold: 0.65
+  telemetry_min_sinr_db: -5.0
+  telemetry_max_stale_seconds: 4.0
+  hysteresis_steps: 2
+  max_actions_per_window: 4
+  action_window_seconds: 60.0
+
+divergence:
+  heading_deviation_threshold_deg: 35.0
+  candidate_signal_drop_threshold_db: 4.0
+  divergence_score_threshold: 0.55

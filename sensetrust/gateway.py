@@ -67,7 +67,9 @@ class Gateway:
         self._certs = {}
         self.degraded = {}          # sensor -> reason: faulty, not hostile; kept out of control loops
         self.pending_enrolments = {}  # device -> one-time token for the technician (reinstatement)
+        self.awaiting_new_key = set() # reinstated, but its new certificate has not been seen yet
         self.network = None           # optional FiveGBinding: SIM + slice must match the certificate
+        self.mobility = None          # optional mobility.MobilityTrust (MOBI-GUARD bridge)
         self.shadow_suspects = set()  # shadow mode: sensors flagged as attacked (alert only)
         self._last_attack_t = None
         self._lock = threading.RLock()
@@ -141,6 +143,12 @@ class Gateway:
             if decision.allowed:
                 self.trust.reward(identity)
                 self._frame[identity] = body.get("value")
+                if identity in self.awaiting_new_key:
+                    self.awaiting_new_key.discard(identity)
+                    if identity in SENSORS:
+                        self.detector.clear(identity)
+                    self._event("re_enrolled", "info", identity,
+                                "new key in use; readings back in the physics check")
                 sealed = self.store.seal("telemetry:%s:%s" % (identity, body.get("seq")), body)
                 self._telemetry_log.write(json.dumps(sealed) + "\n")
             else:
@@ -151,14 +159,68 @@ class Gateway:
         self.latency_us.append((time.perf_counter() - t0) * 1e6)
         return decision.as_dict()
 
+    def mobility_report(self, peer_cert, envelope, source_ip=None):
+        """
+        A moving device (vehicle, mobile robot, field handset) reports its radio picture:
+        serving cell, neighbour signals, speed, heading. Identity, signature, freshness and
+        rate are checked like any message; then MOBI-GUARD's view of the device decides
+        whether this report can come from the same device as the last ones, and what
+        handover to prepare. Returns the decision plus "mobility" (verdict, evidence, advice).
+        """
+        if self.mobility is None:
+            from .mobility import MobilityTrust
+            self.mobility = MobilityTrust()
+        t0 = time.perf_counter()
+        with self._lock:
+            cert_ok, cert_reason, identity, role, cert = self._check_cert(peer_cert)
+            net_ok, net_reason = self._net(identity, "telemetry", source_ip)
+            body = envelope.get("body", {}) if isinstance(envelope, dict) else {}
+            sig_ok = cert is not None and verify_envelope(cert.public_key(), envelope)
+            replay_ok, replay_reason = (self.replay.check(identity, body.get("nonce"),
+                                                          body.get("ts", 0), body.get("seq"))
+                                        if cert_ok and sig_ok else (True, "not checked"))
+            rate_ok = self.rate.allow(identity) if cert_ok else True
+            ctx = {"cert_ok": cert_ok, "cert_reason": cert_reason, "role": role,
+                   "cert_identity": identity, "claimed_identity": body.get("device_id"),
+                   "sig_ok": sig_ok, "replay_ok": replay_ok, "replay_reason": replay_reason,
+                   "rate_ok": rate_ok, "quarantined": self.trust.is_quarantined(identity),
+                   "trust": self.trust.score(identity), "net_ok": net_ok, "net_reason": net_reason}
+            decision = self.policy.decide_mobility(ctx).as_dict()
+            if decision["effect"] != "allow":
+                self._event("mobility_denied", "warning", identity or "unknown",
+                            "; ".join(decision["reasons"]))
+                if cert_ok:
+                    self._penalise_for(identity, decision["reasons"])
+                decision["mobility"] = None
+            else:
+                m = self.mobility.check(identity, body.get("radio", {}),
+                                        trust_score=self.trust.score(identity),
+                                        quarantined=self.trust.is_quarantined(identity))
+                decision["mobility"] = m
+                if m["verdict"] == "impossible":
+                    ev = m["evidence"]
+                    self._event("impossible_movement", "critical", identity,
+                                "one identity in two places at once: %s (report from %s)"
+                                % (ev.get("why", "impossible movement"), ev.get("cell")),
+                                evidence=ev)
+                    if self.trust.penalise(identity, "impossible_movement"):
+                        self._quarantine(identity, "impossible_movement: cloned key or SIM")
+                else:
+                    self.trust.reward(identity)
+        self.latency_us.append((time.perf_counter() - t0) * 1e6)
+        return decision
+
     def process_tick(self, pump, valve):
         """Run the physics check over this second's accepted telemetry."""
         with self._lock:
             # Quarantined and degraded sensors are out of the physics check as well as the
             # control loop: their values are already known to be wrong, and feeding them in
             # would make the honest instruments disagree with them and look faulty.
+            # A device approved for re-enrolment is still silent until it enrols its new key:
+            # that silence is expected, not a dropout fault.
             readings = {s: (None if self.trust.is_quarantined(s) or s in self.degraded
-                            else self._frame.get(s)) for s in SENSORS}
+                            or s in self.awaiting_new_key else self._frame.get(s))
+                        for s in SENSORS}
             self._frame = {}
             diagnoses = self.detector.update(readings, pump, valve)
             for d in diagnoses:
@@ -294,6 +356,10 @@ class Gateway:
                         "%s -> %s: %s" % (body.get("action"), target, "; ".join(decision.reasons)))
             if decision.allowed and body.get("action") == "device.reinstate":
                 self._reinstate(target, who)
+            elif decision.allowed and body.get("action") == "device.revoke":
+                self._revoke_by_admin(target, who)
+            elif decision.allowed and body.get("action") == "maintenance.close":
+                self._close_maintenance(target, who)
         self.latency_us.append((time.perf_counter() - t0) * 1e6)
         return decision.as_dict()
 
@@ -308,10 +374,31 @@ class Gateway:
         self.pending_enrolments[identity] = token
         self.trust._quarantined.pop(identity, None)
         self.trust._score[identity] = 0.7
-        self.detector.alarmed.pop(identity, None)
+        # The new key starts a new message sequence; the old one's numbers mean nothing now.
+        self.replay.forget(identity)
+        self.replay.forget("m2m:" + identity)
+        # The physics check keeps this sensor set aside until its new key is in use.
+        self.awaiting_new_key.add(identity)
         self.degraded.pop(identity, None)
         self._event("reinstated", "info", identity,
                     "re-enrolment token issued, approved by %s; device must enrol a new key" % by)
+
+    def _revoke_by_admin(self, identity, by):
+        """An administrator revokes a device (lost, stolen, decommissioned)."""
+        if self.trust.is_quarantined(identity):
+            return
+        self.trust._quarantined[identity] = "revoked_by_admin"
+        self.trust._score[identity] = 0.0
+        self._certs.setdefault(identity, self.ca.current_cert(identity))
+        self._quarantine(identity, "revoked by %s" % by)
+
+    def _close_maintenance(self, identity, by):
+        """A technician has repaired a faulty instrument: its value is used again."""
+        self.degraded.pop(identity, None)
+        if identity in SENSORS:
+            self.detector.clear(identity)
+        self._event("maintenance_closed", "info", identity,
+                    "repair confirmed by %s; value back in the physics check and control" % by)
 
     # ── machine-to-machine ───────────────────────────────────────────────────
 
